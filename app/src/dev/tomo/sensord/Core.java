@@ -14,6 +14,20 @@ final class Core {
     /** Status snapshot as JSON: addr, error, connections, active, dropped. */
     static native String status();
 
+    /** A location fix for virtual sensor id (see Locations); missing fields are NaN. */
+    static native void onLocation(int id, long elapsedNanos, double lat, double lon,
+            double accuracy, double altitude, double speed, double bearing);
+
+    /** Called by the Go core to start location updates; returns an error or null. */
+    static String locationStart(int id, long intervalMs) {
+        return Locations.start(id, intervalMs);
+    }
+
+    /** Called by the Go core to stop location updates. */
+    static void locationStop(int id) {
+        Locations.stop(id);
+    }
+
     /** Held while a non-wakeup sensor is on; set by SensorService before start(). */
     static volatile PowerManager.WakeLock wakeLock;
 

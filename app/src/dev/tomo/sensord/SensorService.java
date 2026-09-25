@@ -14,18 +14,37 @@ import android.os.PowerManager;
 public class SensorService extends Service {
     private static final String CHANNEL = "sensord";
 
+    /** The running service, for Locations; null when not running. */
+    static volatile SensorService instance;
+
+    private Notification notification;
+    private int types = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+
+    /** Re-declares the foreground service types; throws if Android refuses. */
+    void retype(int newTypes) {
+        startForeground(1, notification, newTypes);
+        types = newTypes;
+    }
+
+    @Override
+    public void onDestroy() {
+        instance = null;
+        super.onDestroy();
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        instance = this;
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, "sensord", NotificationManager.IMPORTANCE_MIN));
-        Notification n = new Notification.Builder(this, CHANNEL)
+        notification = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat)
                 .setContentTitle("sensord running")
                 .setContentIntent(PendingIntent.getActivity(this, 0,
                         new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE))
                 .setOngoing(true)
                 .build();
-        startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        startForeground(1, notification, types);
         if (Core.wakeLock == null) {
             PowerManager.WakeLock wl = getSystemService(PowerManager.class)
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "sensord:sensors");

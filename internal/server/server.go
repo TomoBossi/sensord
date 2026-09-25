@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"math"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -157,7 +158,13 @@ func (s *Server) do(c *conn, req proto.Request) proto.Message {
 		// Readings are float32 at the source; print them as such, like the
 		// event stream does, instead of their float64 expansion.
 		for i, x := range v {
-			v[i], _ = strconv.ParseFloat(strconv.FormatFloat(x, 'g', -1, 32), 64)
+			if math.IsNaN(x) || math.IsInf(x, 0) {
+				v[i] = 0 // JSON has no NaN; event lines use null instead
+				continue
+			}
+			if !info.Precise {
+				v[i], _ = strconv.ParseFloat(strconv.FormatFloat(x, 'g', -1, 32), 64)
+			}
 		}
 		return proto.Message{Op: proto.OpValue, ID: req.ID, Sensor: info.Name, T: t, V: v}
 	case proto.OpUnsub:

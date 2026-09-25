@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     private TextView status;
     private Button battery;
     private Button steps;
+    private Button location;
     private Switch icon;
 
     @Override
@@ -75,6 +76,19 @@ public class MainActivity extends Activity {
         steps = new Button(this);
         steps.setOnClickListener(v -> requestPermissions(new String[]{Manifest.permission.ACTIVITY_RECOGNITION}, 1));
         root.addView(steps);
+
+        location = new Button(this);
+        location.setOnClickListener(v -> {
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION}, 2);
+            } else {
+                // "Allow all the time" can only be chosen in the app's settings.
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
+            }
+        });
+        root.addView(location);
 
         Button stop = new Button(this);
         stop.setText("Stop sensord");
@@ -159,6 +173,13 @@ public class MainActivity extends Activity {
         boolean stepsOk = checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED;
         steps.setText(stepsOk ? "Step sensors: allowed" : "Allow step sensors (physical activity)");
         steps.setEnabled(!stepsOk);
+
+        boolean fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        boolean always = checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        location.setText(!fine ? "Allow location"
+                : always ? "Location: allowed all the time"
+                : "Location: while in use (tap for \"all the time\")");
+        location.setEnabled(!always);
     }
 
     private ComponentName launcherAlias() {

@@ -7,30 +7,37 @@ package main
 #cgo LDFLAGS: -llog
 #include <jni.h>
 #include <stdlib.h>
+#include <string.h>
 #include <android/log.h>
 
 static void logi(const char *msg) { __android_log_write(ANDROID_LOG_INFO, "sensord", msg); }
 static jstring new_string(JNIEnv *env, const char *s) { return (*env)->NewStringUTF(env, s); }
 
-// Calls from Go back into Java: Core.onAwake(boolean).
+// Calls from Go back into Java (static methods of Core).
 static JavaVM *jvm;
 static jclass core;
-static jmethodID on_awake;
+static jmethodID on_awake, loc_start, loc_stop;
 
 static void jni_init(JNIEnv *env, jclass cls) {
 	(*env)->GetJavaVM(env, &jvm);
 	core = (*env)->NewGlobalRef(env, cls);
 	on_awake = (*env)->GetStaticMethodID(env, core, "onAwake", "(Z)V");
+	loc_start = (*env)->GetStaticMethodID(env, core, "locationStart", "(IJ)Ljava/lang/String;");
+	loc_stop = (*env)->GetStaticMethodID(env, core, "locationStop", "(I)V");
 }
 
-static void jni_on_awake(int on) {
+// env_get attaches the calling thread if needed; env_put undoes it.
+static JNIEnv *env_get(int *attached) {
 	JNIEnv *env;
-	int attached = 0;
+	*attached = 0;
 	if ((*jvm)->GetEnv(jvm, (void **)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
 		(*jvm)->AttachCurrentThread(jvm, &env, NULL);
-		attached = 1;
+		*attached = 1;
 	}
-	(*env)->CallStaticVoidMethod(env, core, on_awake, (jboolean)on);
+	return env;
+}
+
+static void env_put(JNIEnv *env, int attached) {
 	if ((*env)->ExceptionCheck(env)) {
 		(*env)->ExceptionClear(env);
 	}
@@ -38,12 +45,46 @@ static void jni_on_awake(int on) {
 		(*jvm)->DetachCurrentThread(jvm);
 	}
 }
+
+static void jni_on_awake(int on) {
+	int a;
+	JNIEnv *env = env_get(&a);
+	(*env)->CallStaticVoidMethod(env, core, on_awake, (jboolean)on);
+	env_put(env, a);
+}
+
+// jni_location_start returns NULL on success, or an error message to free().
+static char *jni_location_start(int id, long long interval_ms) {
+	int a;
+	JNIEnv *env = env_get(&a);
+	char *out = NULL;
+	jstring r = (jstring)(*env)->CallStaticObjectMethod(env, core, loc_start, (jint)id, (jlong)interval_ms);
+	if ((*env)->ExceptionCheck(env)) {
+		out = strdup("java exception in locationStart");
+	} else if (r != NULL) {
+		const char *c = (*env)->GetStringUTFChars(env, r, NULL);
+		out = strdup(c);
+		(*env)->ReleaseStringUTFChars(env, r, c);
+		(*env)->DeleteLocalRef(env, r);
+	}
+	env_put(env, a);
+	return out;
+}
+
+static void jni_location_stop(int id) {
+	int a;
+	JNIEnv *env = env_get(&a);
+	(*env)->CallStaticVoidMethod(env, core, loc_stop, (jint)id);
+	env_put(env, a);
+}
 */
 import "C"
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"net"
 	"runtime"
 	"sync"
@@ -63,6 +104,7 @@ func logf(format string, args ...any) {
 
 var (
 	mu      sync.Mutex
+	theHub  *hub.Hub // for location fixes arriving from Java
 	srv     *server.Server
 	failure string // why the core is not serving, if it isn't
 )
@@ -75,13 +117,17 @@ func fail(format string, args ...any) {
 }
 
 func run() {
-	be, err := ndk.Open("dev.tomo.sensord")
+	nb, err := ndk.Open("dev.tomo.sensord")
 	if err != nil {
 		fail("sensors: %v", err)
 		return
 	}
+	be := &backend{Backend: nb}
 	h := hub.New(be)
-	be.Dispatch = h.Dispatch
+	nb.Dispatch = h.Dispatch
+	mu.Lock()
+	theHub = h
+	mu.Unlock()
 	h.OnAwake = func(on bool) {
 		// JNI attach/detach must happen on one OS thread.
 		runtime.LockOSThread()
@@ -112,6 +158,94 @@ func run() {
 	srv = nil
 	mu.Unlock()
 	fail("serve: %v", err)
+}
+
+// Location as virtual sensors. The handles sit far above ASensor handles.
+const (
+	locationHandle = 0x40000001 // Java Locations id 1: fused provider
+	gpsHandle      = 0x40000002 // Java Locations id 2: raw GNSS
+)
+
+var locationSensors = []hub.Info{
+	{Handle: locationHandle, Name: "location", Vendor: "android fused", Type: "location", TypeID: -1,
+		MinDelayUs: 100000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
+	{Handle: gpsHandle, Name: "gps", Vendor: "android gnss", Type: "gps", TypeID: -2,
+		MinDelayUs: 100000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
+}
+
+// backend is the NDK sensors plus the location virtual sensors, which are
+// served by Java's LocationManager. Location is marked wakeup: fixes arrive
+// by callback, so it needs no wake lock.
+type backend struct {
+	*ndk.Backend
+}
+
+func (b *backend) Sensors() []hub.Info {
+	return append(b.Backend.Sensors(), locationSensors...)
+}
+
+func locationID(h int32) (int, bool) {
+	switch h {
+	case locationHandle:
+		return 1, true
+	case gpsHandle:
+		return 2, true
+	}
+	return 0, false
+}
+
+func (b *backend) Enable(h int32, periodUs int32) error {
+	id, ok := locationID(h)
+	if !ok {
+		return b.Backend.Enable(h, periodUs)
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if msg := C.jni_location_start(C.int(id), C.longlong(max(periodUs/1000, 100))); msg != nil {
+		defer C.free(unsafe.Pointer(msg))
+		return errors.New(C.GoString(msg))
+	}
+	return nil
+}
+
+func (b *backend) SetPeriod(h int32, periodUs int32) error {
+	if _, ok := locationID(h); !ok {
+		return b.Backend.SetPeriod(h, periodUs)
+	}
+	return b.Enable(h, periodUs) // Java restarts updates at the new interval
+}
+
+func (b *backend) Disable(h int32) error {
+	id, ok := locationID(h)
+	if !ok {
+		return b.Backend.Disable(h)
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	C.jni_location_stop(C.int(id))
+	return nil
+}
+
+//export Java_dev_tomo_sensord_Core_onLocation
+func Java_dev_tomo_sensord_Core_onLocation(env *C.JNIEnv, cls C.jclass, id C.jint, t C.jlong,
+	lat, lon, acc, alt, speed, bearing C.jdouble) {
+	mu.Lock()
+	h := theHub
+	mu.Unlock()
+	if h == nil {
+		return
+	}
+	handle := int32(locationHandle)
+	if id == 2 {
+		handle = gpsHandle
+	}
+	v := []float64{float64(lat), float64(lon), float64(acc), float64(alt), float64(speed), float64(bearing)}
+	for i, x := range v {
+		if math.IsInf(x, 0) {
+			v[i] = math.NaN()
+		}
+	}
+	h.Dispatch(handle, int64(t), v)
 }
 
 // statusJSON is what the app's status screen shows.

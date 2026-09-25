@@ -51,6 +51,7 @@ type Info struct {
 	Mode       Mode
 	Wakeup     bool
 	Default    bool
+	Precise    bool // values are float64 (location); hardware sensors are float32
 }
 
 // MaxHz is the fastest rate the sensor supports, or 0 if it has none.
@@ -368,7 +369,7 @@ func (h *Hub) Dispatch(handle int32, t int64, v []float64) {
 			}
 		}
 		if body == nil {
-			body = eventBody(t, v)
+			body = eventBody(t, v, s.info.Precise)
 		}
 		line := make([]byte, 0, len(b.prefix)+len(body))
 		line = append(append(line, b.prefix...), body...)
@@ -498,7 +499,11 @@ func (h *Hub) Dropped() uint64 {
 	return h.dropped
 }
 
-func eventBody(t int64, v []float64) []byte {
+func eventBody(t int64, v []float64, precise bool) []byte {
+	bits := 32
+	if precise {
+		bits = 64
+	}
 	b := make([]byte, 0, 32+len(v)*12)
 	b = append(b, `"t":`...)
 	b = strconv.AppendInt(b, t, 10)
@@ -511,7 +516,7 @@ func eventBody(t int64, v []float64) []byte {
 			b = append(b, "null"...)
 			continue
 		}
-		b = strconv.AppendFloat(b, x, 'g', -1, 32)
+		b = strconv.AppendFloat(b, x, 'g', -1, bits)
 	}
 	return append(b, "]}\n"...)
 }
