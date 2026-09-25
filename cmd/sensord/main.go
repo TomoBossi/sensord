@@ -319,7 +319,7 @@ func formatEvent(ev client.Event) string {
 	b.WriteString(strconv.FormatInt(ev.T, 10))
 	for _, v := range ev.V {
 		b.WriteByte(' ')
-		b.WriteString(strconv.FormatFloat(v, 'g', 6, 64))
+		b.WriteString(strconv.FormatFloat(v, 'g', -1, 64))
 	}
 	return b.String()
 }
