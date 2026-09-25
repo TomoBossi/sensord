@@ -141,21 +141,22 @@ func synopsis(c *command) string {
 }
 
 func mainHelp() {
-	fmt.Println("sensord: read phone sensors through the sensord app\n\nusage:")
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	width := termWidth()
+	fmt.Println(reflow("sensord: read phone sensors through the sensord app", width) + "\n\nusage:")
+	var rows [][2]string
 	for _, c := range commands {
-		fmt.Fprintf(w, "  %s\t%s\n", synopsis(&c), c.summary)
+		rows = append(rows, [2]string{"  " + synopsis(&c), c.summary})
 	}
-	fmt.Fprintf(w, "  sensord help [COMMAND]\tthis help, or a command's details\n")
-	w.Flush()
-	fmt.Println(`
-Every command also takes -h. If the app isn't running, it is started
+	rows = append(rows, [2]string{"  sensord help [COMMAND]", "this help, or a command's details"})
+	fmt.Print(columns(rows, width))
+	fmt.Println()
+	fmt.Println(reflow(`Every command also takes -h. If the app isn't running, it is started
 automatically (set SENSORD_NO_AUTOSTART=1 to disable). Set SENSORD_ADDR to
-reach a server other than 127.0.0.1:47474.`)
+reach a server other than 127.0.0.1:47474.`, width))
 }
 
 func cmdHelp(c *command) {
-	fmt.Printf("usage: %s\n\n%s\n", synopsis(c), c.help)
+	fmt.Printf("usage: %s\n\n%s\n", synopsis(c), reflow(c.help, termWidth()))
 	if c.flags != nil {
 		fs := flag.NewFlagSet(c.name, flag.ContinueOnError)
 		c.flags(fs)
