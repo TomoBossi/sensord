@@ -1,5 +1,6 @@
 package dev.tomo.sensord;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -37,6 +38,7 @@ public class MainActivity extends Activity {
 
     private TextView status;
     private Button battery;
+    private Button steps;
     private Switch icon;
 
     @Override
@@ -69,6 +71,10 @@ public class MainActivity extends Activity {
         battery = new Button(this);
         battery.setOnClickListener(v -> requestBatteryExemption());
         root.addView(battery);
+
+        steps = new Button(this);
+        steps.setOnClickListener(v -> requestPermissions(new String[]{Manifest.permission.ACTIVITY_RECOGNITION}, 1));
+        root.addView(steps);
 
         Button stop = new Button(this);
         stop.setText("Stop sensord");
@@ -148,6 +154,10 @@ public class MainActivity extends Activity {
         boolean exempt = getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
         battery.setText(exempt ? "Battery optimization: exempt" : "Exempt from battery optimization");
         battery.setEnabled(!exempt);
+
+        boolean stepsOk = checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED;
+        steps.setText(stepsOk ? "Step sensors: allowed" : "Allow step sensors (physical activity)");
+        steps.setEnabled(!stepsOk);
     }
 
     private ComponentName launcherAlias() {
