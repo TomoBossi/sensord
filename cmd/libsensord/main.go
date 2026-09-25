@@ -168,9 +168,9 @@ const (
 
 var locationSensors = []hub.Info{
 	{Handle: locationHandle, Name: "location", Vendor: "android fused", Type: "location", TypeID: -1,
-		MinDelayUs: 100000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
+		MinDelayUs: 1000000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
 	{Handle: gpsHandle, Name: "gps", Vendor: "android gnss", Type: "gps", TypeID: -2,
-		MinDelayUs: 100000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
+		MinDelayUs: 1000000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
 }
 
 // backend is the NDK sensors plus the location virtual sensors, which are
