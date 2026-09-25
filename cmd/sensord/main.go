@@ -45,7 +45,9 @@ Modes:
   one-shot    fires on a trigger (gestures such as CHOP_CHOP, significant
               motion); sensord re-arms it, so a stream gets every trigger
   special     sensor-specific (step_detector: one event per step, whose
-              value is always 1; count the lines, not the value)
+              value is always 1; count the lines, not the value. Its
+              timestamps can run a few hundred ms late, so two real steps
+              occasionally arrive ~20 ms apart)
 
 Flags: "default" marks the sensor a type name resolves to; "wakeup" sensors
 can wake the phone from sleep.`,

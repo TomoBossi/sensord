@@ -190,3 +190,14 @@ build.sh
    needs a reboot test.
 5. ~~Polish: Python client, one-shot sensors, get, app icon.~~ Done; the
    gesture sensors still need a physical test.
+
+## Device notes (moto g17 power)
+
+- **Step detector timestamps** occasionally run a few hundred ms late, so two
+  steps arrive ~20 ms apart right after an unusually long gap. They are real
+  steps: the step counter counts both (tested 2026-09-25, batch-by-batch
+  agreement), and sensord passes them through unchanged. Don't filter them.
+- **Step counter** needs ~10 steps before it counts, then adds them at once;
+  it matched 31 for 30 steps walked with the phone in a pocket.
+- **Accelerometer** never runs below 12.5 Hz; slower subscriptions are
+  downsampled.
