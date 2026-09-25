@@ -123,6 +123,14 @@ type Hub struct {
 	Linger     time.Duration
 	GetTimeout time.Duration
 
+	// OnAwake, if set, is called with true when the first non-wakeup sensor
+	// is enabled and with false when the last one is disabled, with the hub
+	// locked. Non-wakeup sensors lose events while the CPU sleeps, so the app
+	// holds a partial wake lock in between; wakeup sensors wake the CPU
+	// themselves and don't count.
+	OnAwake func(bool)
+	awake   int // enabled non-wakeup sensors
+
 	// RearmDelay is the pause before re-enabling a one-shot sensor after it
 	// fires. Android disables it right after delivering the event; enabling
 	// it again too early can race with that.
@@ -262,6 +270,7 @@ func (h *Hub) reconcile(s *sensor) error {
 		s.periodUs = -1
 		s.lastT, s.avgDt = 0, 0
 		s.hasLast = false
+		h.setAwake(s, false)
 		return h.be.Disable(s.info.Handle)
 	}
 	want := int32(math.MaxInt32)
@@ -275,6 +284,7 @@ func (h *Hub) reconcile(s *sensor) error {
 		if err := h.be.Enable(s.info.Handle, want); err != nil {
 			return err
 		}
+		h.setAwake(s, true)
 	case want != s.periodUs:
 		if err := h.be.SetPeriod(s.info.Handle, want); err != nil {
 			return err
@@ -284,6 +294,25 @@ func (h *Hub) reconcile(s *sensor) error {
 	}
 	s.periodUs = want
 	return nil
+}
+
+// setAwake counts s being enabled (on) or disabled for OnAwake. Called with
+// h.mu held, on every enabled <-> disabled transition of s.
+func (h *Hub) setAwake(s *sensor, on bool) {
+	if s.info.Wakeup {
+		return
+	}
+	if on {
+		h.awake++
+		if h.awake == 1 && h.OnAwake != nil {
+			h.OnAwake(true)
+		}
+		return
+	}
+	h.awake--
+	if h.awake == 0 && h.OnAwake != nil {
+		h.OnAwake(false)
+	}
 }
 
 // Dispatch delivers one event of the sensor with the given handle to every
@@ -354,6 +383,7 @@ func (h *Hub) Dispatch(handle int32, t int64, v []float64) {
 func (h *Hub) rearm(s *sensor) {
 	s.periodUs = -1 // Android has disabled it
 	s.hasLast = false
+	h.setAwake(s, false)
 	time.AfterFunc(h.RearmDelay, func() {
 		h.mu.Lock()
 		defer h.mu.Unlock()

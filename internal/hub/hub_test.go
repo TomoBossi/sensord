@@ -337,3 +337,36 @@ func TestOneShotRearms(t *testing.T) {
 		t.Error("re-armed with no subscribers")
 	}
 }
+
+func TestOnAwakeOnlyForNonWakeupSensors(t *testing.T) {
+	h, _ := newHub()
+	var calls []bool
+	h.OnAwake = func(on bool) { calls = append(calls, on) }
+	a, b := &fakeClient{}, &fakeClient{}
+
+	h.Subscribe(a, 1, "accelerometer", 10)
+	h.Subscribe(b, 1, "accelerometer", 100) // same sensor: no new call
+	h.Subscribe(a, 2, "light", 0)           // second non-wakeup sensor: no new call
+	h.Subscribe(a, 3, "ACC_WAKEUP", 0)      // wakeup sensor: never counts
+	h.Subscribe(a, 4, "significant_motion", 0)
+	if len(calls) != 1 || !calls[0] {
+		t.Fatalf("after subscribing: calls %v, want [true]", calls)
+	}
+	h.Drop(b)
+	h.Unsubscribe(a, 2)
+	if len(calls) != 1 {
+		t.Fatalf("released while the accelerometer is still on: %v", calls)
+	}
+	h.Drop(a)
+	if len(calls) != 2 || calls[1] {
+		t.Fatalf("after dropping everyone: calls %v, want [true false]", calls)
+	}
+
+	// Wakeup-only use never takes the wake lock.
+	calls = nil
+	h.Subscribe(a, 5, "ACC_WAKEUP", 0)
+	h.Drop(a)
+	if len(calls) != 0 {
+		t.Errorf("wakeup sensor triggered OnAwake: %v", calls)
+	}
+}

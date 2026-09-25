@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 /** Foreground service that keeps the process, and so its sensor access, alive. */
 public class SensorService extends Service {
@@ -25,6 +26,12 @@ public class SensorService extends Service {
                 .setOngoing(true)
                 .build();
         startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        if (Core.wakeLock == null) {
+            PowerManager.WakeLock wl = getSystemService(PowerManager.class)
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "sensord:sensors");
+            wl.setReferenceCounted(false);
+            Core.wakeLock = wl;
+        }
         Core.start();
         return START_STICKY;
     }

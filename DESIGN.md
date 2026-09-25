@@ -184,7 +184,7 @@ build.sh
    Done.
 2. ~~Hub: `list`/`sub`/`unsub`, per-client downsampling, Go client + CLI.~~
    Done.
-3. `get`, wake lock (test with Termux's own wake lock released).
+3. ~~`get`, wake lock (test with Termux's own wake lock released).~~ Done.
 4. ~~Boot start, hidden icon toggle, status screen.~~ Done; boot start and
    the icon toggle verified (hidden with no placeholder). Boot start is
    blocked by DuraSpeed; replaced by client auto-start (see Device notes).
@@ -211,5 +211,10 @@ build.sh
   agreement), and sensord passes them through unchanged. Don't filter them.
 - **Step counter** needs ~10 steps before it counts, then adds them at once;
   it matched 31 for 30 steps walked with the phone in a pocket.
+- **Wake lock is required.** With the screen off and no wake lock held
+  anywhere, a 50 Hz accelerometer stream lost data in gaps of up to 97 s
+  (sensor-time gaps, so dropped, not delayed). sensord now holds a partial
+  wake lock (`sensord:sensors`) exactly while a non-wakeup sensor is
+  enabled; wakeup sensors (gestures, step detector) don't take it.
 - **Accelerometer** never runs below 12.5 Hz; slower subscriptions are
   downsampled.

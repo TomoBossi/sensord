@@ -122,6 +122,7 @@ public class MainActivity extends Activity {
             } else {
                 sb.append("Serving on ").append(s.getString("addr")).append('\n');
                 sb.append("Connections: ").append(s.getInt("connections")).append('\n');
+                sb.append("Keeping CPU awake: ").append(Core.isAwake() ? "yes" : "no").append('\n');
                 long dropped = s.getLong("dropped");
                 if (dropped > 0) {
                     sb.append("Dropped events: ").append(dropped).append('\n');
