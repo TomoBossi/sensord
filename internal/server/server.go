@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/TomoBossi/sensord/internal/hub"
@@ -152,6 +153,11 @@ func (s *Server) do(c *conn, req proto.Request) proto.Message {
 		info, t, v, err := s.Hub.Get(req.Sensor, req.Hz)
 		if err != nil {
 			return fail(err)
+		}
+		// Readings are float32 at the source; print them as such, like the
+		// event stream does, instead of their float64 expansion.
+		for i, x := range v {
+			v[i], _ = strconv.ParseFloat(strconv.FormatFloat(x, 'g', -1, 32), 64)
 		}
 		return proto.Message{Op: proto.OpValue, ID: req.ID, Sensor: info.Name, T: t, V: v}
 	case proto.OpUnsub:

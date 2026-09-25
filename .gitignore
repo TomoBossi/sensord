@@ -1,3 +1,5 @@
 build/
 *.apk
 *.jks
+__pycache__/
+*.egg-info/

@@ -73,7 +73,7 @@ that stream.
 ```json
 {"op":"list","id":1}
 {"op":"sub","id":2,"sensor":"accelerometer","hz":50}
-{"op":"sub","id":3,"sensor":"CHOP_CHOP"}
+{"op":"sub","id":3,"sensor":"CHOP_CHP"}
 {"op":"unsub","id":4,"sub":2}
 {"op":"ping","id":5}
 ```
@@ -84,7 +84,7 @@ Server → client:
 {"op":"list","id":1,"sensors":[{"name":"bmi3xy_acc","vendor":"bmi","type":"accelerometer","type_id":1,"max_hz":400,"mode":"continuous","default":true}, ...]}
 {"op":"ok","id":2,"sensor":"bmi3xy_acc","hz":50}
 {"id":2,"t":863308967866138,"v":[-0.298,0.065,9.963]}
-{"op":"err","id":3,"msg":"one-shot sensors are not supported yet"}
+{"op":"err","id":3,"msg":"unknown sensor"}
 {"op":"pong","id":5}
 ```
 
