@@ -149,8 +149,9 @@ func mainHelp() {
 	fmt.Fprintf(w, "  sensord help [COMMAND]\tthis help, or a command's details\n")
 	w.Flush()
 	fmt.Println(`
-Every command also takes -h. Set SENSORD_ADDR to reach a server other than
-127.0.0.1:47474.`)
+Every command also takes -h. If the app isn't running, it is started
+automatically (set SENSORD_NO_AUTOSTART=1 to disable). Set SENSORD_ADDR to
+reach a server other than 127.0.0.1:47474.`)
 }
 
 func cmdHelp(c *command) {
@@ -206,7 +207,6 @@ func main() {
 	c, err := client.Dial(os.Getenv("SENSORD_ADDR"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, "start it with: am start -n dev.tomo.sensord/.MainActivity")
 		os.Exit(1)
 	}
 	defer c.Close()

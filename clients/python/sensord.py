@@ -15,8 +15,11 @@ Standard library only. Protocol: newline-delimited JSON over TCP on
 import json
 import os
 import queue
+import shutil
 import socket
+import subprocess
 import threading
+import time
 from typing import NamedTuple
 
 DEFAULT_ADDR = ("127.0.0.1", 47474)
@@ -37,7 +40,12 @@ _END = object()  # queued to wake consumers when a stream ends
 
 
 def connect(addr=None):
-    """Connect to sensord. addr defaults to $SENSORD_ADDR or 127.0.0.1:47474."""
+    """Connect to sensord. addr defaults to $SENSORD_ADDR or 127.0.0.1:47474.
+
+    If nothing is listening at the default address, the sensord app is started
+    (am startservice, available in Termux) and the connection retried for up to
+    10 s. Set SENSORD_NO_AUTOSTART=1 to disable that.
+    """
     if addr is None:
         env = os.environ.get("SENSORD_ADDR")
         if env:
@@ -47,11 +55,34 @@ def connect(addr=None):
             addr = DEFAULT_ADDR
     try:
         sock = socket.create_connection(addr)
+    except ConnectionRefusedError as e:
+        if addr != DEFAULT_ADDR or os.environ.get("SENSORD_NO_AUTOSTART") or not _start_app():
+            raise SensordError(f"sensord not reachable at {addr[0]}:{addr[1]}: {e}") from e
+        sock = _retry(addr, 10)
     except OSError as e:
-        raise SensordError(
-            f"sensord not reachable at {addr[0]}:{addr[1]} (is the app running?): {e}"
-        ) from e
+        raise SensordError(f"sensord not reachable at {addr[0]}:{addr[1]}: {e}") from e
     return Client(sock)
+
+
+def _start_app():
+    am = shutil.which("am")
+    if not am:
+        return False
+    cmd = [am, "startservice", "-n", "dev.tomo.sensord/.SensorService"]
+    return subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+
+def _retry(addr, seconds):
+    deadline = time.monotonic() + seconds
+    while True:
+        time.sleep(0.1)
+        try:
+            return socket.create_connection(addr)
+        except OSError as e:
+            if time.monotonic() >= deadline:
+                raise SensordError(
+                    f"sensord not reachable at {addr[0]}:{addr[1]} (is the app installed?): {e}"
+                ) from e
 
 
 class Client:

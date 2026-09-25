@@ -21,7 +21,10 @@
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity-alias>
-    <service android:name=".SensorService" android:exported="false" android:foregroundServiceType="specialUse">
+    <!-- Exported so clients in Termux can start it on demand with
+         `am startservice`: boot start is unreliable here, because MediaTek's
+         DuraSpeed suppresses BOOT_COMPLETED delivery to this app. -->
+    <service android:name=".SensorService" android:exported="true" android:foregroundServiceType="specialUse">
       <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Local sensor data server for on-device programs"/>
     </service>
     <receiver android:name=".BootReceiver" android:exported="true">

@@ -13,7 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"os/exec"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/TomoBossi/sensord/proto"
 )
@@ -47,13 +51,27 @@ type Client struct {
 }
 
 // Dial connects to sensord at addr, or at proto.DefaultAddr if addr is "".
+//
+// If nothing is listening at the default address, Dial starts the sensord app
+// (am startservice, available in Termux) and retries for up to 10 s. Set
+// SENSORD_NO_AUTOSTART=1 to disable that.
 func Dial(addr string) (*Client, error) {
 	if addr == "" {
 		addr = proto.DefaultAddr
 	}
 	nc, err := net.Dial("tcp", addr)
+	if err != nil && errors.Is(err, syscall.ECONNREFUSED) && addr == proto.DefaultAddr && os.Getenv("SENSORD_NO_AUTOSTART") == "" {
+		if startApp() == nil {
+			for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+				time.Sleep(100 * time.Millisecond)
+				if nc, err = net.Dial("tcp", addr); err == nil {
+					break
+				}
+			}
+		}
+	}
 	if err != nil {
-		return nil, fmt.Errorf("sensord not reachable at %s (is the app running?): %w", addr, err)
+		return nil, fmt.Errorf("sensord not reachable at %s (is the app installed?): %w", addr, err)
 	}
 	c := &Client{
 		nc:      nc,
@@ -64,6 +82,15 @@ func Dial(addr string) (*Client, error) {
 	}
 	go c.read()
 	return c, nil
+}
+
+// startApp asks Android to start the sensord service.
+func startApp() error {
+	am, err := exec.LookPath("am")
+	if err != nil {
+		return err
+	}
+	return exec.Command(am, "startservice", "-n", "dev.tomo.sensord/.SensorService").Run()
 }
 
 // Close ends the connection. The server stops every subscription of this

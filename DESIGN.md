@@ -186,12 +186,24 @@ build.sh
    Done.
 3. `get`, wake lock (test with Termux's own wake lock released).
 4. ~~Boot start, hidden icon toggle, status screen.~~ Done; boot start and
-   the icon toggle verified (hidden with no placeholder); boot start still
-   needs a reboot test.
+   the icon toggle verified (hidden with no placeholder). Boot start is
+   blocked by DuraSpeed; replaced by client auto-start (see Device notes).
 5. ~~Polish: Python client, one-shot sensors, get, app icon.~~ Done; the
    gesture sensors still need a physical test.
 
 ## Device notes (moto g17 power)
+
+- **Boot start does not work here.** MediaTek's DuraSpeed (a preinstalled,
+  hidden background-app limiter) skips BOOT_COMPLETED for this app:
+  `skipped by policy at enqueue: ... suppress to start process of
+  staticReceiver`. Its settings screen is protected by a signature permission
+  and has no entry in Settings. **Instead, clients start the app on demand:**
+  on a refused connection to the default address, the Go and Python clients
+  run `am startservice -n dev.tomo.sensord/.SensorService` (Termux's `am`
+  has no `start-foreground-service`) and retry for 10 s; about 2.5 s from a
+  dead app to the first reading. `SENSORD_NO_AUTOSTART=1` disables this.
+  SensorService is exported for that reason. A persisted JobScheduler job
+  also got past DuraSpeed in a forced test, but was dropped as unnecessary.
 
 - **Step detector timestamps** occasionally run a few hundred ms late, so two
   steps arrive ~20 ms apart right after an unusually long gap. They are real
