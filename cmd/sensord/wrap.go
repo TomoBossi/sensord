@@ -116,9 +116,16 @@ func columns(rows [][2]string, width int) string {
 	for _, r := range rows {
 		lw = max(lw, len(r[0]))
 	}
+	// All rows side by side, or all stacked: mixing the two looks ragged.
+	fits := true
+	for _, r := range rows {
+		if lw+3+len(r[1]) > width {
+			fits = false
+		}
+	}
 	var b strings.Builder
 	for _, r := range rows {
-		if lw+3+len(r[1]) <= width {
+		if fits {
 			b.WriteString(r[0] + strings.Repeat(" ", lw-len(r[0])+3) + r[1] + "\n")
 			continue
 		}
