@@ -14,8 +14,9 @@ CC="clang --target=aarch64-linux-android29" CGO_ENABLED=1 \
     go build -buildmode=c-shared -trimpath -ldflags=-s -o $B/lib/arm64-v8a/libsensord.so ./cmd/libsensord
 rm -f $B/lib/arm64-v8a/libsensord.h
 
-aapt2 link -o $B/base.apk -I "$JAR" --manifest app/AndroidManifest.xml
-javac -Xlint:-options --release 11 -cp "$JAR" -d $B/classes $(find app/src -name '*.java')
+aapt2 compile --dir app/res -o $B/res.zip
+aapt2 link -o $B/base.apk -I "$JAR" --manifest app/AndroidManifest.xml -R $B/res.zip --java $B/gen
+javac -Xlint:-options --release 11 -cp "$JAR" -d $B/classes $(find app/src $B/gen -name '*.java')
 d8 --release --min-api 29 --lib "$JAR" --output $B $(find $B/classes -name '*.class')
 
 cp $B/base.apk $B/unsigned.apk

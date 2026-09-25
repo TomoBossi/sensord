@@ -8,6 +8,7 @@
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
   <application android:label="sensord" android:extractNativeLibs="true"
+      android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
       android:theme="@android:style/Theme.DeviceDefault.DayNight">
     <!-- Exported without a launcher filter, so `am start` reaches it even
          while the launcher alias below is disabled. -->

@@ -188,4 +188,5 @@ build.sh
 4. ~~Boot start, hidden icon toggle, status screen.~~ Done; boot start and
    the icon toggle verified (hidden with no placeholder); boot start still
    needs a reboot test.
-5. Polish: Python client, one-shot sensors, docs.
+5. ~~Polish: Python client, one-shot sensors, get, app icon.~~ Done; the
+   gesture sensors still need a physical test.
