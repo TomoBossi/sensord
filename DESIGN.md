@@ -19,38 +19,46 @@ the sensors someone is reading.
   100 Hz both got ~99 Hz. Whoever sits in the middle must downsample.
 
 So the app holds a real foreground service, owns every sensor registration and
-multiplexes to clients.
+multiplexes to clients. The spike (commit 5d68296) confirmed it: 99 Hz through
+138 s of screen off, with no gaps.
 
 ## Components
 
 ```
- Termux process ──┐                         ┌─ SensorManager
- Termux process ──┼── abstract unix socket ─┤    (one registration per sensor,
- other app ───────┘      @sensord           │     at the fastest rate needed)
-                                            └─ per-client downsampling
+ Termux process ──┐                          ┌─ NDK ASensorManager
+ Termux process ──┼── TCP 127.0.0.1:47474 ───┤    (one registration per sensor,
+ other app ───────┘   (Go core, in the APK)  │     at the fastest rate needed)
+                                             └─ per-client downsampling
 ```
 
-- **SensorService** (foreground service, type `specialUse`): accepts
-  connections, runs the hub. Started at boot and by opening the app.
+- **Go core** (`cmd/libsensord`, built with cgo as a c-shared `libsensord.so`):
+  the socket server, protocol, hub, downsampling and the sensor reading itself,
+  via the NDK sensor API. Java calls into it through a single JNI entry point.
+- **SensorService** (Java, foreground service, type `specialUse`): keeps the
+  process in the foreground state and loads the Go core. Started at boot and by
+  opening the app.
 - **BootReceiver**: `BOOT_COMPLETED` → start the service.
 - **MainActivity**: status (clients, active sensors, rates), a "hide launcher
   icon" toggle, and a battery-exemption shortcut. When hidden, it can still be
   opened with `am start -n dev.tomo.sensord/.MainActivity`.
 - **Launcher entry** is an `activity-alias`, so hiding it means disabling the
   alias via `setComponentEnabledSetting`, the same approach as Termux:API.
-- **Clients**: a Python module plus a `sensord` CLI in Termux. Other languages
-  just open the socket, since the protocol is plain text.
+- **Clients**: a Go package plus a `sensord` CLI in Termux, and a Python
+  module. Other languages just open the socket, since the protocol is plain
+  text.
 
 ## Transport
 
-The socket is a unix socket in the **abstract namespace**, `@sensord`. The
-app's data dir is not reachable from Termux, and an abstract socket needs no
-file. From Python: `socket.connect("\0sensord")`; from Go: `"@sensord"`; from
-the shell: `socat - ABSTRACT-CONNECT:sensord`.
+The transport is **TCP on `127.0.0.1:47474`**. A unix socket was the first
+choice, but SELinux gives each app its own MLS categories (sensord
+`untrusted_app:c7,…`, Termux `untrusted_app_27:c5,…`), which blocks connects
+across apps. Termux:API escapes this only by sharing Termux's uid, which
+requires Termux's signing key. Loopback is not reachable from off the device.
 
-**Access control:** any app can reach an abstract socket, so the server checks
-the peer uid (`SO_PEERCRED`) against an allow list. Default: its own uid and
-Termux's uid (resolved via `PackageManager`, currently 10261).
+**Access control:** none for now. Any local app with `INTERNET` can connect,
+but ordinary sensors need no permission, so any app could read them directly
+anyway. The only thing it would gain is our foreground status while it is
+itself in the background. Revisit if body sensors are ever added.
 
 ## Protocol
 
@@ -122,32 +130,35 @@ Server → client:
 
 ## Build
 
-No Gradle and no AndroidX. `build.sh` runs aapt2 → javac → d8 → zip →
-apksigner against `~/.local/share/android-sdk/platforms/android-35/android.jar`.
+No Gradle and no AndroidX. `build.sh` runs go (c-shared) → aapt2 → javac →
+d8 → zip → apksigner against `~/.local/share/android-sdk/platforms/android-35/android.jar`.
 `./build.sh install` also runs `adb install -r`.
 
 The signing keystore lives outside the repo, at
 `~/.local/share/android-keys/sensord.jks`. **If it is lost, updates require an
 uninstall.** It needs a backup somewhere once remotes exist.
 
-The downsampler and hub are plain Java with no Android imports, so they are
-unit tested on the desktop JVM.
+The hub and downsampler are pure Go with no cgo, so they are tested with
+plain `go test` in Termux.
 
 ## Layout
 
 ```
+cmd/libsensord/          Go core entry point (c-shared, JNI export, NDK glue)
+internal/hub/            subscriptions, rates, downsampling (pure Go)
+cmd/sensord/             Termux CLI
+client/                  Go client package
+clients/python/          Python client
 app/AndroidManifest.xml
-app/src/dev/tomo/sensord/…     Java sources
-app/res/…                      minimal resources
-clients/python/sensord.py      client module + CLI
-test/…                         JVM unit tests
+app/src/dev/tomo/sensord/  Java shell
 build.sh
 ```
 
 ## Milestones
 
-1. Service + socket + `list`/`sub`/`unsub`, Python client. Verify the
-   screen-off case with the same 75 s test that failed before.
-2. Downsampling, `get`, wake lock, per-uid access control.
-3. Boot start, hidden icon toggle, status screen.
-4. Polish: CLI, one-shot sensors, docs.
+1. ~~Spike: Go core in the APK streams the accelerometer; screen-off test.~~
+   Done.
+2. Hub: `list`/`sub`/`unsub`, per-client downsampling, Go client + CLI.
+3. `get`, wake lock (test with Termux's own wake lock released).
+4. Boot start, hidden icon toggle, status screen.
+5. Polish: Python client, one-shot sensors, docs.
