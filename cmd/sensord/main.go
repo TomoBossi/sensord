@@ -44,7 +44,8 @@ Modes:
   on-change   reports only when the value changes (light, step_counter, ...)
   one-shot    fires on a trigger (gestures such as CHOP_CHOP, significant
               motion); sensord re-arms it, so a stream gets every trigger
-  special     sensor-specific (step_detector: one event per step)
+  special     sensor-specific (step_detector: one event per step, whose
+              value is always 1; count the lines, not the value)
 
 Flags: "default" marks the sensor a type name resolves to; "wakeup" sensors
 can wake the phone from sleep.`,
@@ -99,6 +100,7 @@ TIMESTAMP is nanoseconds since boot (Android's elapsedRealtimeNanos).
 Examples:
   sensord stream accelerometer 20     # x y z in m/s^2, 20 times a second
   sensord stream -n 1 step_counter    # steps since boot, once
+  sensord stream step_detector        # one line per step (value always 1)
   sensord stream CHOP_CHOP            # one line per chop gesture`,
 		flags: func(fs *flag.FlagSet) {
 			streamN = fs.Int("n", 0, "stop after N events (0 = forever)")
