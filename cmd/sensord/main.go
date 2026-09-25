@@ -1,11 +1,5 @@
-// Command sensord is the Termux-side CLI for the sensord app.
-//
-//	sensord list                        sensors on this device
-//	sensord status                      connections and powered sensors
-//	sensord stream [-n N] [-json] SENSOR [HZ]
-//	                                    print events; SENSOR is a name or a type
-//	sensord rate SENSOR [HZ]            print delivered events per second
-//	sensord get SENSOR                  print the latest reading once
+// Command sensord is the Termux-side CLI for the sensord app. Run
+// "sensord help" for the command list and "sensord help COMMAND" for details.
 package main
 
 import (
@@ -21,25 +15,190 @@ import (
 	"github.com/TomoBossi/sensord/client"
 )
 
-func usage() {
-	fmt.Fprint(os.Stderr, `usage:
-  sensord list
-  sensord status
-  sensord stream [-n N] [-json] SENSOR [HZ]
-  sensord rate SENSOR [HZ]
-  sensord get SENSOR
+type command struct {
+	name    string
+	args    string // synopsis after the command name
+	summary string
+	help    string // details for "sensord help NAME"
+	flags   func(*flag.FlagSet)
+	run     func(c *client.Client, fs *flag.FlagSet) error
+}
 
-SENSOR is an exact name from "sensord list" or a type such as accelerometer,
-gyroscope, light. HZ defaults to 0, meaning as fast as the sensor goes.
-Set SENSORD_ADDR to reach a server other than 127.0.0.1:47474.
-`)
-	os.Exit(2)
+const sensorHelp = `SENSOR is an exact name from "sensord list" (case-insensitive), or a type
+such as accelerometer, gyroscope, light, step_counter, which picks the
+default sensor of that type.`
+
+var (
+	streamN    *int
+	streamJSON *bool
+)
+
+var commands = []command{
+	{
+		name:    "list",
+		summary: "list the sensors on this device",
+		help: `Prints every sensor with its type, maximum rate, reporting mode and flags.
+
+Modes:
+  continuous  reports at a steady rate (accelerometer, gyroscope, ...)
+  on-change   reports only when the value changes (light, step_counter, ...)
+  one-shot    fires on a trigger (gestures such as CHOP_CHOP, significant
+              motion); sensord re-arms it, so a stream gets every trigger
+  special     sensor-specific (step_detector: one event per step)
+
+Flags: "default" marks the sensor a type name resolves to; "wakeup" sensors
+can wake the phone from sleep.`,
+		run: func(c *client.Client, fs *flag.FlagSet) error { return list(c) },
+	},
+	{
+		name:    "status",
+		summary: "show connected programs and which sensors are powered",
+		help: `Shows how many programs are connected (besides this command) and, for each
+powered sensor, the requested rate, the rate it actually delivers, and how
+many readers share it. "no sensors powered" means nothing is using power.`,
+		run: func(c *client.Client, fs *flag.FlagSet) error { return status(c) },
+	},
+	{
+		name:    "get",
+		args:    "SENSOR",
+		summary: "print the current reading once",
+		help: `Prints one reading as "TIMESTAMP VALUE...". If nobody is reading the sensor,
+it is powered on just long enough to get a reading, and stays on for 2 s so
+repeated gets are fast. Useful for polling from scripts.
+
+` + sensorHelp + `
+
+Example:
+  sensord get light          # e.g. 899500397744320 52  (lux)`,
+		run: func(c *client.Client, fs *flag.FlagSet) error {
+			if fs.NArg() != 1 {
+				return errUsage
+			}
+			ev, err := c.Get(fs.Arg(0), 0)
+			if err == nil {
+				fmt.Println(formatEvent(ev))
+			}
+			return err
+		},
+	},
+	{
+		name:    "stream",
+		args:    "[-n N] [-json] SENSOR [HZ]",
+		summary: "print every event as it arrives",
+		help: `Prints each event as "TIMESTAMP VALUE..." (or JSON with -json) until
+interrupted. This is the data itself; to just see how many events arrive per
+second, use "sensord rate".
+
+` + sensorHelp + `
+
+HZ is the delivery rate; omit it or pass 0 for every event the sensor
+produces. The rate actually granted is printed to stderr first.
+
+TIMESTAMP is nanoseconds since boot (Android's elapsedRealtimeNanos).
+
+Examples:
+  sensord stream accelerometer 20     # x y z in m/s^2, 20 times a second
+  sensord stream -n 1 step_counter    # steps since boot, once
+  sensord stream CHOP_CHOP            # one line per chop gesture`,
+		flags: func(fs *flag.FlagSet) {
+			streamN = fs.Int("n", 0, "stop after N events (0 = forever)")
+			streamJSON = fs.Bool("json", false, "print JSON lines")
+		},
+		run: func(c *client.Client, fs *flag.FlagSet) error { return stream(c, fs.Args()) },
+	},
+	{
+		name:    "rate",
+		args:    "SENSOR [HZ]",
+		summary: "count events per second, without printing them",
+		help: `Subscribes like "sensord stream" but prints only how many events arrived in
+each second. Handy for checking that a sensor delivers the rate you asked for.
+
+` + sensorHelp + `
+
+Example:
+  sensord rate gyroscope 200`,
+		run: func(c *client.Client, fs *flag.FlagSet) error { return rate(c, fs.Args()) },
+	},
+}
+
+var errUsage = fmt.Errorf("usage")
+
+func find(name string) *command {
+	for i := range commands {
+		if commands[i].name == name {
+			return &commands[i]
+		}
+	}
+	return nil
+}
+
+func synopsis(c *command) string {
+	return strings.TrimSpace("sensord " + c.name + " " + c.args)
+}
+
+func mainHelp() {
+	fmt.Println("sensord: read phone sensors through the sensord app\n\nusage:")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+	for _, c := range commands {
+		fmt.Fprintf(w, "  %s\t%s\n", synopsis(&c), c.summary)
+	}
+	fmt.Fprintf(w, "  sensord help [COMMAND]\tthis help, or a command's details\n")
+	w.Flush()
+	fmt.Println(`
+Every command also takes -h. Set SENSORD_ADDR to reach a server other than
+127.0.0.1:47474.`)
+}
+
+func cmdHelp(c *command) {
+	fmt.Printf("usage: %s\n\n%s\n", synopsis(c), c.help)
+	if c.flags != nil {
+		fs := flag.NewFlagSet(c.name, flag.ContinueOnError)
+		c.flags(fs)
+		fmt.Println("\nflags:")
+		fs.SetOutput(os.Stdout)
+		fs.PrintDefaults()
+	}
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		usage()
+	args := os.Args[1:]
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		if len(args) >= 2 {
+			if c := find(args[1]); c != nil {
+				cmdHelp(c)
+				return
+			}
+			fmt.Fprintf(os.Stderr, "unknown command %q\n\n", args[1])
+		}
+		mainHelp()
+		if len(args) == 0 {
+			os.Exit(2)
+		}
+		return
 	}
+	cmd := find(args[0])
+	if cmd == nil {
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", args[0])
+		mainHelp()
+		os.Exit(2)
+	}
+	fs := flag.NewFlagSet(cmd.name, flag.ContinueOnError)
+	fs.Usage = func() { cmdHelp(cmd) }
+	if cmd.flags != nil {
+		cmd.flags(fs)
+	}
+	rest := args[1:]
+	if len(rest) > 0 && rest[0] == "help" {
+		cmdHelp(cmd)
+		return
+	}
+	if err := fs.Parse(rest); err != nil {
+		if err == flag.ErrHelp {
+			return
+		}
+		os.Exit(2)
+	}
+
 	c, err := client.Dial(os.Getenv("SENSORD_ADDR"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -47,28 +206,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer c.Close()
-
-	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
-	case "list":
-		err = list(c)
-	case "status":
-		err = status(c)
-	case "stream":
-		err = stream(c, args)
-	case "get":
-		if len(args) != 1 {
-			usage()
+	if err := cmd.run(c, fs); err != nil {
+		if err == errUsage {
+			fmt.Fprintf(os.Stderr, "usage: %s\n(sensord help %s for details)\n", synopsis(cmd), cmd.name)
+			os.Exit(2)
 		}
-		var ev client.Event
-		if ev, err = c.Get(args[0], 0); err == nil {
-			fmt.Println(formatEvent(ev))
-		}
-	case "rate":
-		err = rate(c, args)
-	default:
-		usage()
-	}
-	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -126,7 +268,7 @@ func status(c *client.Client) error {
 
 func subscribe(c *client.Client, args []string) (*client.Subscription, error) {
 	if len(args) < 1 || len(args) > 2 {
-		usage()
+		return nil, errUsage
 	}
 	hz := 0.0
 	if len(args) == 2 {
@@ -148,11 +290,8 @@ func subscribe(c *client.Client, args []string) (*client.Subscription, error) {
 }
 
 func stream(c *client.Client, args []string) error {
-	fs := flag.NewFlagSet("stream", flag.ExitOnError)
-	n := fs.Int("n", 0, "stop after N events (0 = forever)")
-	asJSON := fs.Bool("json", false, "print JSON lines")
-	fs.Parse(args)
-	sub, err := subscribe(c, fs.Args())
+	n, asJSON := streamN, streamJSON
+	sub, err := subscribe(c, args)
 	if err != nil {
 		return err
 	}
