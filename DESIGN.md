@@ -174,5 +174,6 @@ build.sh
    Done.
 3. `get`, wake lock (test with Termux's own wake lock released).
 4. ~~Boot start, hidden icon toggle, status screen.~~ Done; boot start and
-   the icon toggle still need a test on the device (reboot, tap).
+   the icon toggle verified (hidden with no placeholder); boot start still
+   needs a reboot test.
 5. Polish: Python client, one-shot sensors, docs.
