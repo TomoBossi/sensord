@@ -3,6 +3,7 @@ package dev.tomo.sensord;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.hardware.GeomagneticField;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -88,10 +89,17 @@ final class Locations {
     }
 
     private static void deliver(int id, Location l) {
+        // From Android's model of Earth's field at this place: the magnetic
+        // declination (degrees, east positive; add it to a magnetic heading
+        // for true north) and the field strength a compass should measure.
+        GeomagneticField g = new GeomagneticField((float) l.getLatitude(), (float) l.getLongitude(),
+                l.hasAltitude() ? (float) l.getAltitude() : 0f, System.currentTimeMillis());
         Core.onVirtual(id, l.getElapsedRealtimeNanos(), new double[]{l.getLatitude(), l.getLongitude(),
                 l.hasAccuracy() ? l.getAccuracy() : Double.NaN,
                 l.hasAltitude() ? l.getAltitude() : Double.NaN,
                 l.hasSpeed() ? l.getSpeed() : Double.NaN,
-                l.hasBearing() ? l.getBearing() : Double.NaN});
+                l.hasBearing() ? l.getBearing() : Double.NaN,
+                g.getDeclination(),
+                g.getFieldStrength() / 1000.0}); // expected field here, uT
     }
 }

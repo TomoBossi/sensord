@@ -16,6 +16,7 @@ package ndk
 
 static uint64_t step_count(const ASensorEvent *e) { return e->u64.step_counter; }
 static const float *event_data(const ASensorEvent *e) { return e->data; }
+static int mag_status(const ASensorEvent *e) { return e->magnetic.status; }
 */
 import "C"
 
@@ -130,6 +131,10 @@ func (b *Backend) loop() {
 					}
 					for _, x := range data[:k] {
 						vals = append(vals, float64(x))
+					}
+					if e._type == C.ASENSOR_TYPE_MAGNETIC_FIELD {
+						// calibration status: 0 unreliable, 1 low, 2 medium, 3 high
+						vals = append(vals, float64(C.mag_status(e)))
 					}
 				}
 				b.Dispatch(h, int64(e.timestamp), vals)

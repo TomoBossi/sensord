@@ -108,6 +108,9 @@ auto-start the app; start it with
 - **Timestamps** (`t`) are nanoseconds since boot, on the same clock as
   Android's `elapsedRealtimeNanos` and `CLOCK_BOOTTIME`. They are not wall
   time.
+- **The magnetometer** adds a 4th value: its calibration status (0
+  unreliable, 1 low, 2 medium, 3 high; wave the phone in a figure 8 to
+  raise it).
 - **Values** (`v`) follow Android's
   [SensorEvent](https://developer.android.com/reference/android/hardware/SensorEvent#values)
   layout per type: accelerometer m/s², gyroscope rad/s, magnetometer µT,
@@ -133,8 +136,11 @@ Two virtual sensors, used exactly like the others (`sensord get location`,
 | `location` | Android's fused provider: satellites, Wi-Fi and cell towers, balanced power | the everyday choice; works indoors |
 | `gps` | raw satellite fixes (GNSS) | best accuracy outdoors; more power, nothing indoors |
 
-Values: `[lat, lon, accuracy_m, altitude_m, speed_m/s, bearing_deg]`, with
-full float64 precision. Fields a fix lacks are `null` in streams (and 0 in
+Values: `[lat, lon, accuracy_m, altitude_m, speed_m/s, bearing_deg,
+declination_deg, field_uT]`, with full float64 precision. The last two come
+from Android's model of Earth's magnetic field at that place: add the
+declination to a magnetic heading to get true north, and compare the
+magnetometer's magnitude with `field_uT` to detect local disturbances. Fields a fix lacks are `null` in streams (and 0 in
 `get`). The rate is capped at 1 Hz. A new subscription gets the last known fix
 at once, with its original timestamp, then live fixes.
 
