@@ -103,9 +103,22 @@ Server → client:
 - On-change sensors deliver their cached last value right after `sub`, with
   its original, possibly old, timestamp.
 
-Not built yet: `get`, a latest-value poll for programs that prefer polling. It
-would turn the sensor on, keep it on while gets keep arriving, and switch it
-off 2 s after the last one.
+`get` returns the latest reading for programs that prefer polling:
+
+```json
+{"op":"get","id":6,"sensor":"light"}
+{"op":"value","id":6,"sensor":"ltr569_l","t":899500397744320,"v":[52]}
+```
+
+If the sensor is off, `get` powers it on (at `hz`, default up to 50 Hz) and
+waits for the first reading, for at most 5 s. It stays on for 2 s after the
+last `get`, so a polling loop keeps it warm by itself. Measured on the device
+via the CLI: about 150 ms cold and 75 ms warm, most of it process startup.
+
+One-shot sensors (significant motion, the Motorola gestures such as
+`CHOP_CHOP`) can be subscribed. Android disables them after each trigger;
+the hub re-arms them after 100 ms for as long as someone is subscribed, so a
+subscription is a stream of triggers. `get` refuses them.
 
 ## Rates and energy
 
@@ -124,8 +137,7 @@ off 2 s after the last one.
 - Downsampling rules by reporting mode:
   - on-change sensors (light, step counter): every change is forwarded, with
     `hz` acting as a cap;
-  - one-shot sensors (significant motion): delivered once, then the
-    subscription ends.
+  - one-shot sensors: every trigger is forwarded, then re-armed.
 - A **partial wake lock is held only while at least one sensor is active**.
   Without it the CPU suspends with the screen off and non-wakeup sensor events
   stall; with zero subscriptions, nothing is held.

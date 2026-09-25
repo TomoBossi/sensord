@@ -14,15 +14,17 @@ const (
 	OpList   = "list"   // -> Message{Op: "list", Sensors: ...}
 	OpSub    = "sub"    // Sensor, Hz -> Message{Op: "ok", Sensor, Hz}, then events
 	OpUnsub  = "unsub"  // Sub -> Message{Op: "ok"}
+	OpGet    = "get"    // Sensor, Hz -> Message{Op: "value", Sensor, T, V}
 	OpPing   = "ping"   // -> Message{Op: "pong"}
 	OpStatus = "status" // -> Message{Op: "status", Status: ...}
 )
 
 // Reply ops.
 const (
-	OpOK   = "ok"
-	OpErr  = "err"
-	OpPong = "pong"
+	OpOK    = "ok"
+	OpErr   = "err"
+	OpPong  = "pong"
+	OpValue = "value"
 )
 
 // Request is a client -> server message.
@@ -30,7 +32,7 @@ type Request struct {
 	Op     string  `json:"op"`
 	ID     int64   `json:"id,omitempty"`
 	Sensor string  `json:"sensor,omitempty"` // exact sensor name, or a type such as "accelerometer"
-	Hz     float64 `json:"hz,omitempty"`     // 0 = as fast as the sensor goes
+	Hz     float64 `json:"hz,omitempty"`     // sub: 0 = every event; get: rate while warm, 0 = up to 50
 	Sub    int64   `json:"sub,omitempty"`    // unsub: id of the sub request to stop
 }
 
@@ -59,7 +61,8 @@ type Status struct {
 // ActiveSensor is a sensor that is currently powered.
 type ActiveSensor struct {
 	Name        string  `json:"name"`
-	Hz          float64 `json:"hz"`          // registered rate; 0 for on-change sensors
+	Mode        string  `json:"mode"`
+	Hz          float64 `json:"hz"`          // registered rate; 0 unless continuous
 	MeasuredHz  float64 `json:"measured_hz"` // actual event rate
 	Subscribers int     `json:"subscribers"`
 }

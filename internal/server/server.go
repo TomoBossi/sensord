@@ -28,8 +28,8 @@ type Server struct {
 func (s *Server) Status() proto.Status {
 	st := proto.Status{Connections: int(s.conns.Load()), Dropped: s.Hub.Dropped(), Active: []proto.ActiveSensor{}}
 	for _, a := range s.Hub.Active() {
-		as := proto.ActiveSensor{Name: a.Info.Name, MeasuredHz: a.MeasuredHz, Subscribers: a.Subs}
-		if a.PeriodUs > 0 {
+		as := proto.ActiveSensor{Name: a.Info.Name, Mode: a.Info.Mode.String(), MeasuredHz: a.MeasuredHz, Subscribers: a.Subs}
+		if a.PeriodUs > 0 && a.Info.Mode == hub.Continuous {
 			as.Hz = 1e6 / float64(a.PeriodUs)
 		}
 		st.Active = append(st.Active, as)
@@ -148,6 +148,12 @@ func (s *Server) do(c *conn, req proto.Request) proto.Message {
 			s.Logf("sub %d %s at %.1f Hz", req.ID, info.Name, hz)
 		}
 		return proto.Message{Op: proto.OpOK, ID: req.ID, Sensor: info.Name, Hz: hz}
+	case proto.OpGet:
+		info, t, v, err := s.Hub.Get(req.Sensor, req.Hz)
+		if err != nil {
+			return fail(err)
+		}
+		return proto.Message{Op: proto.OpValue, ID: req.ID, Sensor: info.Name, T: t, V: v}
 	case proto.OpUnsub:
 		if err := s.Hub.Unsubscribe(c, req.Sub); err != nil {
 			return fail(err)

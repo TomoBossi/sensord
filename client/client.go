@@ -182,6 +182,18 @@ func (c *Client) Status() (proto.Status, error) {
 	return *m.Status, nil
 }
 
+// Get returns the latest reading of sensor. If nobody is reading it, the
+// server powers it on and waits for the first reading, then keeps it on for
+// 2 s after the last Get, so polling in a loop stays fast. hz is the rate while
+// warm; 0 means up to 50 Hz.
+func (c *Client) Get(sensor string, hz float64) (Event, error) {
+	m, err := c.call(proto.Request{Op: proto.OpGet, Sensor: sensor, Hz: hz}, nil)
+	if err != nil {
+		return Event{}, err
+	}
+	return Event{T: m.T, V: m.V}, nil
+}
+
 // Ping checks that the server is responsive.
 func (c *Client) Ping() error {
 	_, err := c.call(proto.Request{Op: proto.OpPing}, nil)

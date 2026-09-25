@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Mode is a sensor's reporting mode.
@@ -82,6 +83,17 @@ type sensor struct {
 	periodUs int32 // registered period; -1 while disabled
 	lastT    int64 // timestamp of the previous event
 	avgDt    int64 // smoothed interval between events, ns; 0 until measured
+
+	// Latest reading, for Get. Valid only while the sensor is enabled.
+	hasLast bool
+	lastV   []float64
+	waiters []chan struct{} // closed on the next event
+
+	// Get keeps the sensor powered through a pseudo-subscription (c == nil)
+	// until pollUntil.
+	poll      *sub
+	pollUntil time.Time
+	pollTimer *time.Timer
 }
 
 type sub struct {
@@ -104,6 +116,17 @@ type Hub struct {
 	byType   map[string]*sensor // default sensor per type string
 	clients  map[Client]map[int64]*sub
 	dropped  uint64
+
+	// Linger is how long a sensor stays powered after the last Get, so a
+	// polling loop keeps it warm. GetTimeout bounds the wait for a first
+	// reading. Set both before use.
+	Linger     time.Duration
+	GetTimeout time.Duration
+
+	// RearmDelay is the pause before re-enabling a one-shot sensor after it
+	// fires. Android disables it right after delivering the event; enabling
+	// it again too early can race with that.
+	RearmDelay time.Duration
 }
 
 func New(be Backend) *Hub {
@@ -113,6 +136,10 @@ func New(be Backend) *Hub {
 		byName:   map[string]*sensor{},
 		byType:   map[string]*sensor{},
 		clients:  map[Client]map[int64]*sub{},
+
+		Linger:     2 * time.Second,
+		GetTimeout: 5 * time.Second,
+		RearmDelay: 100 * time.Millisecond,
 	}
 	for _, info := range be.Sensors() {
 		s := &sensor{info: info, subs: map[*sub]struct{}{}, periodUs: -1}
@@ -156,9 +183,6 @@ func (h *Hub) Subscribe(c Client, id int64, spec string, hz float64) (Info, floa
 	if s == nil {
 		return Info{}, 0, ErrUnknownSensor
 	}
-	if s.info.Mode == OneShot {
-		return Info{}, 0, errors.New("one-shot sensors are not supported yet")
-	}
 	if h.clients[c][id] != nil {
 		return Info{}, 0, fmt.Errorf("id %d already in use", id)
 	}
@@ -167,9 +191,9 @@ func (h *Hub) Subscribe(c Client, id int64, spec string, hz float64) (Info, floa
 	b.prefix = strconv.AppendInt([]byte(`{"id":`), id, 10)
 	b.prefix = append(b.prefix, ',')
 	granted := 0.0
-	min := s.info.MinDelayUs
+	min := max(s.info.MinDelayUs, 0) // -1 for one-shot sensors
 	switch {
-	case hz == 0:
+	case hz == 0 || s.info.Mode == OneShot:
 		b.regUs = min
 		granted = s.info.MaxHz()
 	default:
@@ -237,6 +261,7 @@ func (h *Hub) reconcile(s *sensor) error {
 		}
 		s.periodUs = -1
 		s.lastT, s.avgDt = 0, 0
+		s.hasLast = false
 		return h.be.Disable(s.info.Handle)
 	}
 	want := int32(math.MaxInt32)
@@ -286,8 +311,21 @@ func (h *Hub) Dispatch(handle int32, t int64, v []float64) {
 	}
 	s.lastT = t
 	tol := s.avgDt / 2
+
+	s.lastV = append(s.lastV[:0], v...)
+	s.hasLast = true
+	for _, w := range s.waiters {
+		close(w)
+	}
+	s.waiters = nil
+	if s.info.Mode == OneShot {
+		defer h.rearm(s)
+	}
 	var body []byte
 	for b := range s.subs {
+		if b.c == nil { // Get's pseudo-subscription
+			continue
+		}
 		if b.periodNs > 0 && b.due != 0 && t < b.due-tol {
 			continue
 		}
@@ -308,6 +346,92 @@ func (h *Hub) Dispatch(handle int32, t int64, v []float64) {
 		if !b.c.Send(line) {
 			h.dropped++
 		}
+	}
+}
+
+// rearm schedules re-enabling a one-shot sensor that just fired, if anyone is
+// still subscribed. Called with h.mu held.
+func (h *Hub) rearm(s *sensor) {
+	s.periodUs = -1 // Android has disabled it
+	s.hasLast = false
+	time.AfterFunc(h.RearmDelay, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if s.periodUs < 0 {
+			h.reconcile(s)
+		}
+	})
+}
+
+// Get returns the latest reading of the sensor named by spec. If the sensor
+// is off, Get turns it on at hz (0 = up to 50 Hz) and waits for the first
+// reading. The sensor stays on for Linger after the last Get.
+func (h *Hub) Get(spec string, hz float64) (Info, int64, []float64, error) {
+	if hz < 0 || math.IsNaN(hz) || math.IsInf(hz, 0) {
+		return Info{}, 0, nil, fmt.Errorf("invalid hz %v", hz)
+	}
+	h.mu.Lock()
+	s := h.resolve(spec)
+	if s == nil {
+		h.mu.Unlock()
+		return Info{}, 0, nil, ErrUnknownSensor
+	}
+	if s.info.Mode == OneShot {
+		h.mu.Unlock()
+		return Info{}, 0, nil, errors.New("one-shot sensors have no current value; subscribe instead")
+	}
+	if hz == 0 {
+		hz = 50
+	}
+	regUs := int32(max(1e6/hz, float64(s.info.MinDelayUs)))
+	if s.poll == nil {
+		s.poll = &sub{s: s, regUs: regUs}
+		s.subs[s.poll] = struct{}{}
+	} else if regUs < s.poll.regUs {
+		s.poll.regUs = regUs
+	}
+	if err := h.reconcile(s); err != nil {
+		delete(s.subs, s.poll)
+		s.poll = nil
+		h.mu.Unlock()
+		return Info{}, 0, nil, err
+	}
+	s.pollUntil = time.Now().Add(h.Linger)
+	if s.pollTimer == nil {
+		s.pollTimer = time.AfterFunc(h.Linger, func() { h.endPoll(s) })
+	}
+
+	if !s.hasLast {
+		w := make(chan struct{})
+		s.waiters = append(s.waiters, w)
+		h.mu.Unlock()
+		select {
+		case <-w:
+		case <-time.After(h.GetTimeout):
+			return Info{}, 0, nil, errors.New("no reading yet (on-change sensors report only when their value changes)")
+		}
+		h.mu.Lock()
+	}
+	defer h.mu.Unlock()
+	if !s.hasLast {
+		return Info{}, 0, nil, errors.New("sensor stopped before its first reading")
+	}
+	return s.info, s.lastT, append([]float64(nil), s.lastV...), nil
+}
+
+// endPoll powers the sensor down once Linger has passed since the last Get.
+func (h *Hub) endPoll(s *sensor) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if d := time.Until(s.pollUntil); d > 0 {
+		s.pollTimer = time.AfterFunc(d, func() { h.endPoll(s) })
+		return
+	}
+	s.pollTimer = nil
+	if s.poll != nil {
+		delete(s.subs, s.poll)
+		s.poll = nil
+		h.reconcile(s)
 	}
 }
 

@@ -5,6 +5,7 @@
 //	sensord stream [-n N] [-json] SENSOR [HZ]
 //	                                    print events; SENSOR is a name or a type
 //	sensord rate SENSOR [HZ]            print delivered events per second
+//	sensord get SENSOR                  print the latest reading once
 package main
 
 import (
@@ -26,6 +27,7 @@ func usage() {
   sensord status
   sensord stream [-n N] [-json] SENSOR [HZ]
   sensord rate SENSOR [HZ]
+  sensord get SENSOR
 
 SENSOR is an exact name from "sensord list" or a type such as accelerometer,
 gyroscope, light. HZ defaults to 0, meaning as fast as the sensor goes.
@@ -53,6 +55,14 @@ func main() {
 		err = status(c)
 	case "stream":
 		err = stream(c, args)
+	case "get":
+		if len(args) != 1 {
+			usage()
+		}
+		var ev client.Event
+		if ev, err = c.Get(args[0], 0); err == nil {
+			fmt.Println(formatEvent(ev))
+		}
 	case "rate":
 		err = rate(c, args)
 	default:
@@ -105,7 +115,7 @@ func status(c *client.Client) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "POWERED\tHZ\tACTUAL\tREADERS")
 	for _, a := range st.Active {
-		hz := "on-change"
+		hz := a.Mode
 		if a.Hz > 0 {
 			hz = strconv.FormatFloat(a.Hz, 'f', 1, 64)
 		}
@@ -152,19 +162,23 @@ func stream(c *client.Client, args []string) error {
 		if *asJSON {
 			enc.Encode(map[string]any{"t": ev.T, "v": ev.V})
 		} else {
-			var b strings.Builder
-			b.WriteString(strconv.FormatInt(ev.T, 10))
-			for _, v := range ev.V {
-				b.WriteByte(' ')
-				b.WriteString(strconv.FormatFloat(v, 'g', 6, 64))
-			}
-			fmt.Println(b.String())
+			fmt.Println(formatEvent(ev))
 		}
 		if count++; *n > 0 && count >= *n {
 			return nil
 		}
 	}
 	return c.Err()
+}
+
+func formatEvent(ev client.Event) string {
+	var b strings.Builder
+	b.WriteString(strconv.FormatInt(ev.T, 10))
+	for _, v := range ev.V {
+		b.WriteByte(' ')
+		b.WriteString(strconv.FormatFloat(v, 'g', 6, 64))
+	}
+	return b.String()
 }
 
 func rate(c *client.Client, args []string) error {

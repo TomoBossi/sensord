@@ -60,6 +60,7 @@ func (b *tickBackend) on() bool {
 func start(t *testing.T) (*tickBackend, string) {
 	be := &tickBackend{enabled: map[int32]chan struct{}{}}
 	be.h = hub.New(be)
+	be.h.Linger = 100 * time.Millisecond
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -123,8 +124,14 @@ loop:
 		t.Errorf("got %d events in 1 s at 20 Hz", n)
 	}
 
+	ev, err := c.Get("accelerometer", 0)
+	if err != nil || len(ev.V) != 3 {
+		t.Fatalf("get: %+v %v", ev, err)
+	}
+
+	// The poll (50 Hz) and the subscription (20 Hz) share one registration.
 	st, err := c.Status()
-	if err != nil || st.Connections != 1 || len(st.Active) != 1 || st.Active[0].Subscribers != 1 || st.Active[0].Hz != 20 {
+	if err != nil || st.Connections != 1 || len(st.Active) != 1 || st.Active[0].Subscribers != 2 || st.Active[0].Hz != 50 {
 		t.Fatalf("status %+v, %v", st, err)
 	}
 

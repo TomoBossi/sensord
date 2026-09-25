@@ -130,7 +130,7 @@ public class MainActivity extends Activity {
                         JSONObject a = active.getJSONObject(i);
                         sb.append("  ").append(a.getString("name"));
                         double hz = a.getDouble("hz");
-                        sb.append(hz > 0 ? String.format("  %.0f Hz", hz) : "  on change");
+                        sb.append(hz > 0 ? String.format("  %.0f Hz", hz) : "  " + a.optString("mode"));
                         double measured = a.optDouble("measured_hz", 0);
                         if (measured > 0) {
                             sb.append(String.format(" (actual %.1f)", measured));
