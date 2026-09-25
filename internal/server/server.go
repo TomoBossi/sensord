@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"sync/atomic"
 
 	"github.com/TomoBossi/sensord/internal/hub"
 	"github.com/TomoBossi/sensord/proto"
@@ -19,6 +20,21 @@ const outBuf = 1024
 type Server struct {
 	Hub  *hub.Hub
 	Logf func(format string, args ...any)
+
+	conns atomic.Int64
+}
+
+// Status reports the connections and the sensors currently powered.
+func (s *Server) Status() proto.Status {
+	st := proto.Status{Connections: int(s.conns.Load()), Dropped: s.Hub.Dropped(), Active: []proto.ActiveSensor{}}
+	for _, a := range s.Hub.Active() {
+		as := proto.ActiveSensor{Name: a.Info.Name, MeasuredHz: a.MeasuredHz, Subscribers: a.Subs}
+		if a.PeriodUs > 0 {
+			as.Hz = 1e6 / float64(a.PeriodUs)
+		}
+		st.Active = append(st.Active, as)
+	}
+	return st
 }
 
 // Serve accepts connections until ln fails.
@@ -59,6 +75,8 @@ func (c *conn) reply(m proto.Message) {
 }
 
 func (s *Server) handle(nc net.Conn) {
+	s.conns.Add(1)
+	defer s.conns.Add(-1)
 	c := &conn{out: make(chan []byte, outBuf)}
 	done := make(chan struct{})
 	go func() {
@@ -105,6 +123,9 @@ func (s *Server) do(c *conn, req proto.Request) proto.Message {
 	switch req.Op {
 	case proto.OpPing:
 		return proto.Message{Op: proto.OpPong, ID: req.ID}
+	case proto.OpStatus:
+		st := s.Status()
+		return proto.Message{Op: proto.OpStatus, ID: req.ID, Status: &st}
 	case proto.OpList:
 		infos := s.Hub.Sensors()
 		out := make([]proto.Sensor, len(infos))

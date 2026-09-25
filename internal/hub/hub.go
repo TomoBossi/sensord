@@ -311,6 +311,32 @@ func (h *Hub) Dispatch(handle int32, t int64, v []float64) {
 	}
 }
 
+// Active describes a sensor that is currently enabled.
+type Active struct {
+	Info       Info
+	PeriodUs   int32   // registered period
+	MeasuredHz float64 // actual event rate; 0 until measured
+	Subs       int
+}
+
+// Active lists the enabled sensors.
+func (h *Hub) Active() []Active {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []Active
+	for _, s := range h.sensors {
+		if s.periodUs < 0 {
+			continue
+		}
+		a := Active{Info: s.info, PeriodUs: s.periodUs, Subs: len(s.subs)}
+		if s.avgDt > 0 {
+			a.MeasuredHz = 1e9 / float64(s.avgDt)
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // Dropped counts event lines that clients were too slow to take.
 func (h *Hub) Dropped() uint64 {
 	h.mu.Lock()

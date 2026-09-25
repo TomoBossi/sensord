@@ -1,6 +1,7 @@
 // Command sensord is the Termux-side CLI for the sensord app.
 //
 //	sensord list                        sensors on this device
+//	sensord status                      connections and powered sensors
 //	sensord stream [-n N] [-json] SENSOR [HZ]
 //	                                    print events; SENSOR is a name or a type
 //	sensord rate SENSOR [HZ]            print delivered events per second
@@ -22,6 +23,7 @@ import (
 func usage() {
 	fmt.Fprint(os.Stderr, `usage:
   sensord list
+  sensord status
   sensord stream [-n N] [-json] SENSOR [HZ]
   sensord rate SENSOR [HZ]
 
@@ -47,6 +49,8 @@ func main() {
 	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
 	case "list":
 		err = list(c)
+	case "status":
+		err = status(c)
 	case "stream":
 		err = stream(c, args)
 	case "rate":
@@ -80,6 +84,32 @@ func list(c *client.Client) error {
 			hz = strconv.FormatFloat(s.MaxHz, 'f', 0, 64)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", s.Name, s.Type, hz, s.Mode, strings.Join(flags, ","))
+	}
+	return w.Flush()
+}
+
+func status(c *client.Client) error {
+	st, err := c.Status()
+	if err != nil {
+		return err
+	}
+	// This connection counts too; don't report it.
+	fmt.Printf("connections: %d (besides this one)\n", st.Connections-1)
+	if st.Dropped > 0 {
+		fmt.Printf("dropped events: %d\n", st.Dropped)
+	}
+	if len(st.Active) == 0 {
+		fmt.Println("no sensors powered")
+		return nil
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "POWERED\tHZ\tACTUAL\tREADERS")
+	for _, a := range st.Active {
+		hz := "on-change"
+		if a.Hz > 0 {
+			hz = strconv.FormatFloat(a.Hz, 'f', 1, 64)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%.1f\t%d\n", a.Name, hz, a.MeasuredHz, a.Subscribers)
 	}
 	return w.Flush()
 }

@@ -173,5 +173,6 @@ build.sh
 2. ~~Hub: `list`/`sub`/`unsub`, per-client downsampling, Go client + CLI.~~
    Done.
 3. `get`, wake lock (test with Termux's own wake lock released).
-4. Boot start, hidden icon toggle, status screen.
+4. ~~Boot start, hidden icon toggle, status screen.~~ Done; boot start and
+   the icon toggle still need a test on the device (reboot, tap).
 5. Polish: Python client, one-shot sensors, docs.

@@ -123,6 +123,11 @@ loop:
 		t.Errorf("got %d events in 1 s at 20 Hz", n)
 	}
 
+	st, err := c.Status()
+	if err != nil || st.Connections != 1 || len(st.Active) != 1 || st.Active[0].Subscribers != 1 || st.Active[0].Hz != 20 {
+		t.Fatalf("status %+v, %v", st, err)
+	}
+
 	if err := sub.Close(); err != nil {
 		t.Fatal(err)
 	}

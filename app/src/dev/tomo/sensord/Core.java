@@ -9,5 +9,8 @@ final class Core {
     /** Starts the socket server and sensor loop; idempotent. */
     static native void start();
 
+    /** Status snapshot as JSON: addr, error, connections, active, dropped. */
+    static native String status();
+
     private Core() {}
 }

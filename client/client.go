@@ -173,6 +173,15 @@ func (c *Client) Sensors() ([]proto.Sensor, error) {
 	return m.Sensors, err
 }
 
+// Status reports the server's connections and the sensors currently powered.
+func (c *Client) Status() (proto.Status, error) {
+	m, err := c.call(proto.Request{Op: proto.OpStatus}, nil)
+	if err != nil || m.Status == nil {
+		return proto.Status{}, err
+	}
+	return *m.Status, nil
+}
+
 // Ping checks that the server is responsive.
 func (c *Client) Ping() error {
 	_, err := c.call(proto.Request{Op: proto.OpPing}, nil)

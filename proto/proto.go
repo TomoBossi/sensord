@@ -11,10 +11,11 @@ const DefaultAddr = "127.0.0.1:47474"
 
 // Request ops.
 const (
-	OpList  = "list"  // -> Message{Op: "list", Sensors: ...}
-	OpSub   = "sub"   // Sensor, Hz -> Message{Op: "ok", Sensor, Hz}, then events
-	OpUnsub = "unsub" // Sub -> Message{Op: "ok"}
-	OpPing  = "ping"  // -> Message{Op: "pong"}
+	OpList   = "list"   // -> Message{Op: "list", Sensors: ...}
+	OpSub    = "sub"    // Sensor, Hz -> Message{Op: "ok", Sensor, Hz}, then events
+	OpUnsub  = "unsub"  // Sub -> Message{Op: "ok"}
+	OpPing   = "ping"   // -> Message{Op: "pong"}
+	OpStatus = "status" // -> Message{Op: "status", Status: ...}
 )
 
 // Reply ops.
@@ -41,10 +42,26 @@ type Message struct {
 	Sensor  string   `json:"sensor,omitempty"`
 	Hz      float64  `json:"hz,omitempty"`
 	Sensors []Sensor `json:"sensors,omitempty"`
+	Status  *Status  `json:"status,omitempty"`
 
 	// Event fields.
 	T int64     `json:"t,omitempty"` // event time, ns, CLOCK_BOOTTIME (elapsedRealtimeNanos)
 	V []float64 `json:"v,omitempty"`
+}
+
+// Status is a snapshot of the server's state.
+type Status struct {
+	Connections int            `json:"connections"`
+	Active      []ActiveSensor `json:"active"`
+	Dropped     uint64         `json:"dropped"` // events dropped for slow clients, since start
+}
+
+// ActiveSensor is a sensor that is currently powered.
+type ActiveSensor struct {
+	Name        string  `json:"name"`
+	Hz          float64 `json:"hz"`          // registered rate; 0 for on-change sensors
+	MeasuredHz  float64 `json:"measured_hz"` // actual event rate
+	Subscribers int     `json:"subscribers"`
 }
 
 // Sensor describes one sensor in a list reply.
