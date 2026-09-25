@@ -191,6 +191,23 @@ build.sh
 5. ~~Polish: Python client, one-shot sensors, get, app icon.~~ Done; the
    gesture sensors still need a physical test.
 
+## Location
+
+`location` (fused provider) and `gps` (GNSS) are virtual sensors with handles
+0x40000001/2, above any ASensor handle. `cmd/libsensord` wraps the NDK backend
+in a composite that routes those handles to Java's `Locations` over JNI:
+enable becomes `requestLocationUpdates` with the registration period as the
+interval (capped at 1 s), disable becomes `removeUpdates`. Fixes come back
+through `Core.onLocation` into `hub.Dispatch`, so rates, sharing, `get` and
+linger all work unchanged. They are marked wakeup (callbacks need no wake
+lock) and `Precise` (float64 output). The last known fix is posted to the main
+thread, not delivered inline, because enable runs under the hub lock.
+
+On first use the service re-declares its foreground types as
+`specialUse|location`. Android allows that only while the app may use
+location: started from the foreground (auto-start from Termux qualifies) or
+with background location granted. A refusal becomes the client's error.
+
 ## Device notes (moto g17 power)
 
 - **Boot start does not work here.** MediaTek's DuraSpeed (a preinstalled,

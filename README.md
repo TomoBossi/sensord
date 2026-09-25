@@ -123,6 +123,28 @@ auto-start the app; start it with
 - **Step sensors** need the "physical activity" permission, granted once from
   the app screen.
 
+## Location
+
+Two virtual sensors, used exactly like the others (`sensord get location`,
+`sensord stream gps 1`, `c.Subscribe("location", 1)`):
+
+| Sensor | Source | Use it for |
+|---|---|---|
+| `location` | Android's fused provider: satellites, Wi-Fi and cell towers, balanced power | the everyday choice; works indoors |
+| `gps` | raw satellite fixes (GNSS) | best accuracy outdoors; more power, nothing indoors |
+
+Values: `[lat, lon, accuracy_m, altitude_m, speed_m/s, bearing_deg]`, with
+full float64 precision. Fields a fix lacks are `null` in streams (and 0 in
+`get`). The rate is capped at 1 Hz. A new subscription gets the last known fix
+at once, with its original timestamp, then live fixes.
+
+Like the sensors, location is only requested from Android while a client is
+subscribed, and released when the last one leaves. Needs the location
+permission from the app screen. "Allow all the time" also lets it work when
+sensord was started without anything in the foreground. Heading (where the
+phone points, as in Google Maps) is not a separate sensor: it comes from
+`rotation_vector`.
+
 ## The app
 
 It runs as a foreground service with no visible window. Its launcher icon is
@@ -167,6 +189,9 @@ drops the granted permissions.
   screen.
 - **`register STEP_COUNTER: error -22`**: the physical-activity permission
   isn't granted; grant it on the status screen.
+- **`location permission not granted` / `Android refused location for a
+  background service`**: allow location on the status screen, ideally "all
+  the time".
 - **A rate lower than requested**: check `sensord status` to see what the
   hardware delivers. Some sensors have a fixed floor or ceiling; the
   accelerometer never goes below 12.5 Hz, and slower requests are
