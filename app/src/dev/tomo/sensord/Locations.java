@@ -14,7 +14,7 @@ import android.os.Looper;
  * Location as virtual sensors for the Go core: id 1 is "location" (Android's
  * fused provider: satellites, Wi-Fi and cell towers), id 2 is "gps" (raw
  * satellite fixes). The core calls start/stop like it enables sensors, and
- * fixes go back through Core.onLocation.
+ * fixes go back through Core.onVirtual.
  */
 final class Locations {
     static final int FUSED = 1, GPS = 2;
@@ -88,10 +88,10 @@ final class Locations {
     }
 
     private static void deliver(int id, Location l) {
-        Core.onLocation(id, l.getElapsedRealtimeNanos(), l.getLatitude(), l.getLongitude(),
+        Core.onVirtual(id, l.getElapsedRealtimeNanos(), new double[]{l.getLatitude(), l.getLongitude(),
                 l.hasAccuracy() ? l.getAccuracy() : Double.NaN,
                 l.hasAltitude() ? l.getAltitude() : Double.NaN,
                 l.hasSpeed() ? l.getSpeed() : Double.NaN,
-                l.hasBearing() ? l.getBearing() : Double.NaN);
+                l.hasBearing() ? l.getBearing() : Double.NaN});
     }
 }

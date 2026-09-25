@@ -22,8 +22,8 @@ static void jni_init(JNIEnv *env, jclass cls) {
 	(*env)->GetJavaVM(env, &jvm);
 	core = (*env)->NewGlobalRef(env, cls);
 	on_awake = (*env)->GetStaticMethodID(env, core, "onAwake", "(Z)V");
-	loc_start = (*env)->GetStaticMethodID(env, core, "locationStart", "(IJ)Ljava/lang/String;");
-	loc_stop = (*env)->GetStaticMethodID(env, core, "locationStop", "(I)V");
+	loc_start = (*env)->GetStaticMethodID(env, core, "virtualStart", "(IJ)Ljava/lang/String;");
+	loc_stop = (*env)->GetStaticMethodID(env, core, "virtualStop", "(I)V");
 }
 
 // env_get attaches the calling thread if needed; env_put undoes it.
@@ -60,7 +60,7 @@ static char *jni_location_start(int id, long long interval_ms) {
 	char *out = NULL;
 	jstring r = (jstring)(*env)->CallStaticObjectMethod(env, core, loc_start, (jint)id, (jlong)interval_ms);
 	if ((*env)->ExceptionCheck(env)) {
-		out = strdup("java exception in locationStart");
+		out = strdup("java exception in virtualStart");
 	} else if (r != NULL) {
 		const char *c = (*env)->GetStringUTFChars(env, r, NULL);
 		out = strdup(c);
@@ -69,6 +69,16 @@ static char *jni_location_start(int id, long long interval_ms) {
 	}
 	env_put(env, a);
 	return out;
+}
+
+// copy_doubles copies up to max values of a Java double[] into out.
+static int copy_doubles(JNIEnv *env, jdoubleArray a, double *out, int max) {
+	jsize n = (*env)->GetArrayLength(env, a);
+	if (n > max) {
+		n = max;
+	}
+	(*env)->GetDoubleArrayRegion(env, a, 0, n, out);
+	return n;
 }
 
 static void jni_location_stop(int id) {
@@ -160,10 +170,13 @@ func run() {
 	fail("serve: %v", err)
 }
 
-// Location as virtual sensors. The handles sit far above ASensor handles.
+// Virtual sensors served by Java. The handles sit far above ASensor handles;
+// the low bits are the Java-side id.
 const (
-	locationHandle = 0x40000001 // Java Locations id 1: fused provider
-	gpsHandle      = 0x40000002 // Java Locations id 2: raw GNSS
+	locationHandle = 0x40000001 // Locations id 1: fused provider
+	gpsHandle      = 0x40000002 // Locations id 2: raw GNSS
+	displayHandle  = 0x40000003 // Displays: screen rotation
+	virtualBase    = 0x40000000
 )
 
 var locationSensors = []hub.Info{
@@ -171,6 +184,8 @@ var locationSensors = []hub.Info{
 		MinDelayUs: 1000000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
 	{Handle: gpsHandle, Name: "gps", Vendor: "android gnss", Type: "gps", TypeID: -2,
 		MinDelayUs: 1000000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
+	{Handle: displayHandle, Name: "display_rotation", Vendor: "android display", Type: "display_rotation", TypeID: -3,
+		Mode: hub.OnChange, Wakeup: true, Default: true},
 }
 
 // backend is the NDK sensors plus the location virtual sensors, which are
@@ -186,10 +201,8 @@ func (b *backend) Sensors() []hub.Info {
 
 func locationID(h int32) (int, bool) {
 	switch h {
-	case locationHandle:
-		return 1, true
-	case gpsHandle:
-		return 2, true
+	case locationHandle, gpsHandle, displayHandle:
+		return int(h - virtualBase), true
 	}
 	return 0, false
 }
@@ -226,26 +239,24 @@ func (b *backend) Disable(h int32) error {
 	return nil
 }
 
-//export Java_dev_tomo_sensord_Core_onLocation
-func Java_dev_tomo_sensord_Core_onLocation(env *C.JNIEnv, cls C.jclass, id C.jint, t C.jlong,
-	lat, lon, acc, alt, speed, bearing C.jdouble) {
+//export Java_dev_tomo_sensord_Core_onVirtual
+func Java_dev_tomo_sensord_Core_onVirtual(env *C.JNIEnv, cls C.jclass, id C.jint, t C.jlong, values C.jdoubleArray) {
 	mu.Lock()
 	h := theHub
 	mu.Unlock()
 	if h == nil {
 		return
 	}
-	handle := int32(locationHandle)
-	if id == 2 {
-		handle = gpsHandle
-	}
-	v := []float64{float64(lat), float64(lon), float64(acc), float64(alt), float64(speed), float64(bearing)}
-	for i, x := range v {
-		if math.IsInf(x, 0) {
+	var buf [16]C.double
+	n := int(C.copy_doubles(env, values, &buf[0], C.int(len(buf))))
+	v := make([]float64, n)
+	for i := range v {
+		v[i] = float64(buf[i])
+		if math.IsInf(v[i], 0) {
 			v[i] = math.NaN()
 		}
 	}
-	h.Dispatch(handle, int64(t), v)
+	h.Dispatch(int32(virtualBase+int32(id)), int64(t), v)
 }
 
 // statusJSON is what the app's status screen shows.

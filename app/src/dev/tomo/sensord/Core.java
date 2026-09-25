@@ -14,18 +14,27 @@ final class Core {
     /** Status snapshot as JSON: addr, error, connections, active, dropped. */
     static native String status();
 
-    /** A location fix for virtual sensor id (see Locations); missing fields are NaN. */
-    static native void onLocation(int id, long elapsedNanos, double lat, double lon,
-            double accuracy, double altitude, double speed, double bearing);
+    /**
+     * A reading of virtual sensor id (1 location, 2 gps, 3 display rotation),
+     * on the elapsedRealtimeNanos clock; missing values are NaN.
+     */
+    static native void onVirtual(int id, long elapsedNanos, double[] values);
 
-    /** Called by the Go core to start location updates; returns an error or null. */
-    static String locationStart(int id, long intervalMs) {
+    /** Called by the Go core to start a virtual sensor; returns an error or null. */
+    static String virtualStart(int id, long intervalMs) {
+        if (id == Displays.ID) {
+            return Displays.start();
+        }
         return Locations.start(id, intervalMs);
     }
 
-    /** Called by the Go core to stop location updates. */
-    static void locationStop(int id) {
-        Locations.stop(id);
+    /** Called by the Go core to stop a virtual sensor. */
+    static void virtualStop(int id) {
+        if (id == Displays.ID) {
+            Displays.stop();
+        } else {
+            Locations.stop(id);
+        }
     }
 
     /** Held while a non-wakeup sensor is on; set by SensorService before start(). */

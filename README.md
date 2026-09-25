@@ -145,6 +145,15 @@ sensord was started without anything in the foreground. Heading (where the
 phone points, as in Google Maps) is not a separate sensor: it comes from
 `rotation_vector`.
 
+## Display rotation
+
+`display_rotation` reports how the screen is rotated from the phone's natural
+(portrait) orientation: `0`, `90`, `180` or `270` degrees, whenever it changes
+(Android's `Display.getRotation`). Sensor axes are fixed to the phone's body,
+so an app that rotates, like Termux in landscape, needs this value to know
+which axis is "up" on screen: rotate sensor vectors by it around z. It costs
+nothing while unsubscribed.
+
 ## The app
 
 It runs as a foreground service with no visible window. Its launcher icon is
