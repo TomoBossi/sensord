@@ -63,39 +63,49 @@ itself in the background. Revisit if body sensors are ever added.
 ## Protocol
 
 Newline-delimited JSON, one object per line, both directions. At 400 Hz that
-comes to roughly 40 KB/s per stream, which is negligible. A binary framing can
-be added later as a per-subscription option if it ever matters.
+comes to roughly 40 KB/s per stream, which is negligible. The types live in
+package `proto`.
 
-Client → server (`id` is chosen by the client and echoed back):
+Client → server. `id` is optional and chosen by the client; the server echoes
+it in the reply. For `sub` it is required, and it also tags every event of
+that stream.
 
 ```json
-{"op":"list"}
-{"op":"sub","id":1,"sensor":"accelerometer","hz":50}
-{"op":"sub","id":2,"sensor":"CHOP_CHOP"}
-{"op":"unsub","id":1}
-{"op":"get","sensor":"light"}
-{"op":"ping"}
+{"op":"list","id":1}
+{"op":"sub","id":2,"sensor":"accelerometer","hz":50}
+{"op":"sub","id":3,"sensor":"CHOP_CHOP"}
+{"op":"unsub","id":4,"sub":2}
+{"op":"ping","id":5}
 ```
 
 Server → client:
 
 ```json
-{"op":"list","sensors":[{"name":"bmi3xy_acc","type":"accelerometer","type_id":1,"max_hz":400,"mode":"continuous","wakeup":false}, ...]}
-{"op":"ok","id":1,"hz":50}
-{"id":1,"t":863308967866138,"v":[-0.298,0.065,9.963],"acc":3}
-{"op":"err","id":2,"msg":"unknown sensor"}
+{"op":"list","id":1,"sensors":[{"name":"bmi3xy_acc","vendor":"bmi","type":"accelerometer","type_id":1,"max_hz":400,"mode":"continuous","default":true}, ...]}
+{"op":"ok","id":2,"sensor":"bmi3xy_acc","hz":50}
+{"id":2,"t":863308967866138,"v":[-0.298,0.065,9.963]}
+{"op":"err","id":3,"msg":"one-shot sensors are not supported yet"}
+{"op":"pong","id":5}
 ```
 
-- `sensor` accepts a type name (`accelerometer`, `gyroscope`, `light`, … →
-  the default sensor of that type) or an exact sensor name for vendor and
-  non-default sensors.
-- `t` is the event timestamp in ns (the `elapsedRealtimeNanos` clock). `v` is
-  the raw values array and `acc` is accuracy.
-- `hz` omitted or `0` means as fast as the sensor goes.
-- `get` returns the latest value, for programs that prefer polling. If the
-  sensor is off, `get` turns it on and waits for the first sample. It stays on
-  while gets keep arriving and switches off 2 s after the last one, so a
-  polling loop keeps it warm by itself.
+- Event lines are the only messages without `op`.
+- `sensor` accepts an exact sensor name, or a type (`accelerometer`,
+  `gyroscope`, `light`, …) meaning the default sensor of that type. Matching
+  is case-insensitive.
+- `t` is the event timestamp in ns, on the `elapsedRealtimeNanos` clock.
+- `v` is the values array per the Android `SensorEvent` docs. For vendor types
+  with an unknown layout, trailing zeros are trimmed.
+- `hz` omitted or `0` means every event. The reply says what was granted,
+  clamped to the sensor's maximum.
+- Events of a subscription always arrive before the `ok` for its `unsub`.
+- A client that falls about 1024 lines behind has events dropped, never
+  replies.
+- On-change sensors deliver their cached last value right after `sub`, with
+  its original, possibly old, timestamp.
+
+Not built yet: `get`, a latest-value poll for programs that prefer polling. It
+would turn the sensor on, keep it on while gets keep arriving, and switch it
+off 2 s after the last one.
 
 ## Rates and energy
 
@@ -106,8 +116,10 @@ Server → client:
   for**, clamped to the sensor's `minDelay`. It is re-registered when that
   changes.
 - **Per-subscription downsampling by timestamp:** emit an event when
-  `t >= due`, then `due += period`, resyncing to `t + period` if more than one
-  period behind. A 10 Hz client sharing a 100 Hz sensor gets every 10th sample
+  `t >= due - tol`, then `due += period`, resyncing if more than one period
+  behind. `tol` is half the *measured* source interval: hardware drifts from
+  the registered period, and may clamp it (the accelerometer here never goes
+  below 12.5 Hz). A 10 Hz client sharing a 100 Hz sensor gets every 10th sample
   on average, with no drift.
 - Downsampling rules by reporting mode:
   - on-change sensors (light, step counter): every change is forwarded, with
@@ -158,7 +170,8 @@ build.sh
 
 1. ~~Spike: Go core in the APK streams the accelerometer; screen-off test.~~
    Done.
-2. Hub: `list`/`sub`/`unsub`, per-client downsampling, Go client + CLI.
+2. ~~Hub: `list`/`sub`/`unsub`, per-client downsampling, Go client + CLI.~~
+   Done.
 3. `get`, wake lock (test with Termux's own wake lock released).
 4. Boot start, hidden icon toggle, status screen.
 5. Polish: Python client, one-shot sensors, docs.
