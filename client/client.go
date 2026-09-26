@@ -50,12 +50,17 @@ type Client struct {
 	closed  chan struct{}
 }
 
-// Dial connects to sensord at addr, or at proto.DefaultAddr if addr is "".
+// Dial connects to sensord at addr. If addr is "", it uses $SENSORD_ADDR,
+// or proto.DefaultAddr if that is unset: so pointing SENSORD_ADDR at a
+// "sensord replay" server runs any program against a recording.
 //
 // If nothing is listening at the default address, Dial starts the sensord app
 // (am startservice, available in Termux) and retries for up to 10 s. Set
 // SENSORD_NO_AUTOSTART=1 to disable that.
 func Dial(addr string) (*Client, error) {
+	if addr == "" {
+		addr = os.Getenv("SENSORD_ADDR")
+	}
 	if addr == "" {
 		addr = proto.DefaultAddr
 	}

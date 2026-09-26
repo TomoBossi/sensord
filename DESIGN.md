@@ -46,6 +46,10 @@ multiplexes to clients. The spike (commit 5d68296) confirmed it: 99 Hz through
 - **Clients**: a Go package plus a `sensord` CLI in Termux, and a Python
   module. Other languages just open the socket, since the protocol is plain
   text.
+- **Replay** (`sensord replay`, CLI side): the same hub and server as the
+  app, over a backend that plays a recording instead of the NDK. One
+  playback clock drives every sensor, so they stay in step however late each
+  is subscribed; timestamps become playback time, increasing across loops.
 
 ## Transport
 

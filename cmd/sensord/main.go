@@ -22,6 +22,8 @@ type command struct {
 	help    string // details for "sensord help NAME"
 	flags   func(*flag.FlagSet)
 	run     func(c *client.Client, fs *flag.FlagSet) error
+	// noClient: the command doesn't talk to the app (run gets nil).
+	noClient bool
 }
 
 const sensorHelp = `SENSOR is an exact name from "sensord list" (case-insensitive), or a type
@@ -205,12 +207,15 @@ func main() {
 		os.Exit(2)
 	}
 
-	c, err := client.Dial(os.Getenv("SENSORD_ADDR"))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	var c *client.Client
+	if !cmd.noClient {
+		var err error
+		if c, err = client.Dial(""); err != nil { // honors SENSORD_ADDR
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		defer c.Close()
 	}
-	defer c.Close()
 	if err := cmd.run(c, fs); err != nil {
 		if err == errUsage {
 			fmt.Fprintf(os.Stderr, "usage: %s\n(sensord help %s for details)\n", synopsis(cmd), cmd.name)

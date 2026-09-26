@@ -28,6 +28,8 @@ client starts it and waits, which takes about 2.5 s once.
 | `sensord get SENSOR` | the current reading, once |
 | `sensord stream [-n N] [-json] SENSOR [HZ]` | every event as it arrives |
 | `sensord rate SENSOR [HZ]` | events per second, to check a rate |
+| `sensord record [-o FILE] [-d DUR] SENSOR[@HZ]...` | record sensors to a file |
+| `sensord replay [-addr ADDR] [-loop] [-speed X] FILE` | serve a recording as if it were the phone |
 
 `sensord help COMMAND`, `sensord COMMAND -h` and `sensord COMMAND help` all
 show a command's details.
@@ -39,6 +41,23 @@ show a command's details.
 **HZ** is the rate you want; omit it or pass 0 for every event the sensor
 produces. The granted rate is printed to stderr, clamped to the sensor's
 maximum.
+
+### Record and replay
+
+`sensord record` writes every event of the sensors you name to a JSON-lines
+file (a header describing them, then `{"s":index,"t":ns,"v":[...]}` per
+event). `sensord replay` serves that file on another port with the same
+protocol as the app, events at their recorded timing, each sensor starting
+where the playback is when a program subscribes, so they stay in step.
+Clients reach it through `SENSORD_ADDR`, which the Go package, the Python
+module and the CLI all honor, so any program runs against a recording
+unchanged, for testing with real motion:
+
+```sh
+sensord record -o walk.jsonl -d 1m gravity@60 rotation_vector@60 step_detector
+sensord replay -loop walk.jsonl &
+SENSORD_ADDR=127.0.0.1:47475 sensordemo compass
+```
 
 ## Go
 
