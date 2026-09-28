@@ -183,3 +183,7 @@ the app before installing a new build.
 - **`location permission not granted` / `Android refused location for a background service`**: allow location on the status screen, ideally "all the time".
 - **A rate lower than requested**: check `sensord status` to see what the hardware delivers. Some sensors have a fixed floor or ceiling; the accelerometer never goes below 12.5 Hz, and slower requests are downsampled.
 - **Events dropped**: a client that falls about 1024 lines behind loses events, so read promptly. The count shows in `sensord status`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
