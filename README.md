@@ -1,23 +1,19 @@
 # sensord
 
-Read this phone's sensors from any program in Termux, at the rate each
-program chooses. An Android app holds the sensors and serves them over a
-local socket. Sensors are powered only while something is reading them, and
-the data keeps flowing with the screen off.
-
-How it works inside: [DESIGN.md](DESIGN.md).
+Read your phone's sensors from any program within [`Termux`](https://github.com/termux/termux-app), at a rate of your choice. An Android app holds the sensors and serves them over a local socket. Sensors are powered only while something is reading them, and the data keeps flowing even with the screen off.
 
 ## Quick start
 
+Within `Termux`:
+
 ```sh
-sensord list                       # the 27 sensors on this phone
-sensord get light                  # one reading: TIMESTAMP LUX
-sensord stream accelerometer 20    # x y z in m/s², 20 times a second
+sensord list                       # list the available sensors on your phone
+sensord get light                  # one reading, a timestamp and a value
+sensord stream accelerometer 20    # many readings, 20 times a second
 sensord help stream                # details for any command
 ```
 
-Nothing needs to be started first. If the app isn't running, the first
-client starts it and waits, which takes about 2.5 s once.
+If the app isn't already running, its first client starts it.
 
 ## CLI
 
@@ -31,27 +27,18 @@ client starts it and waits, which takes about 2.5 s once.
 | `sensord record [-o FILE] [-d DUR] SENSOR[@HZ]...` | record sensors to a file |
 | `sensord replay [-addr ADDR] [-loop] [-speed X] FILE` | serve a recording as if it were the phone |
 
-`sensord help COMMAND`, `sensord COMMAND -h` and `sensord COMMAND help` all
-show a command's details.
+`sensord help COMMAND`, `sensord COMMAND -h` and `sensord COMMAND help` all show a command's details.
 
-**SENSOR** is an exact name from `sensord list` (case-insensitive, such as
-`bmi3xy_gyro` or `CHOP_CHOP`), or a type (`accelerometer`, `gyroscope`,
-`light`, `step_counter`, …), which picks the default sensor of that type.
+**SENSOR** is an exact name from `sensord list` (case-insensitive, such as `bmi3xy_gyro` or `CHOP_CHOP`), or a type (`accelerometer`, `gyroscope`, `light`, `step_counter`, …), which picks the default sensor of that type.
 
-**HZ** is the rate you want; omit it or pass 0 for every event the sensor
-produces. The granted rate is printed to stderr, clamped to the sensor's
-maximum.
+**HZ** is the rate you want, omit it or pass 0 for every event the sensor produces. The granted rate is printed to stderr, clamped to the sensor's maximum.
 
 ### Record and replay
 
-`sensord record` writes every event of the sensors you name to a JSON-lines
-file (a header describing them, then `{"s":index,"t":ns,"v":[...]}` per
-event). `sensord replay` serves that file on another port with the same
-protocol as the app, events at their recorded timing, each sensor starting
-where the playback is when a program subscribes, so they stay in step.
-Clients reach it through `SENSORD_ADDR`, which the Go package, the Python
-module and the CLI all honor, so any program runs against a recording
-unchanged, for testing with real motion:
+`sensord record` writes every event of the sensors you name to a JSON-lines file (a header describing them, then `{"s":index,"t":ns,"v":[...]}` per
+event). `sensord replay` serves that file on another port with the same protocol as the app, events at their recorded timing, each sensor starting
+where the playback is when a program subscribes, so they stay in step. Clients reach it through `SENSORD_ADDR`, which the Go package, the Python
+module and the CLI all honor, so any program runs against a recording unchanged, for testing with real motion:
 
 ```sh
 sensord record -o walk.jsonl -d 1m gravity@60 rotation_vector@60 step_detector
@@ -81,17 +68,9 @@ for ev := range sub.C { // ev.T: ns since boot, ev.V: values
 
 Also `c.Get(sensor, 0)`, `c.Sensors()`, `c.Status()`, and `sub.Close()`.
 
-The repo has no remote, so point your module at the local copy:
-
-```sh
-go mod edit -require github.com/TomoBossi/sensord@v0.0.0 \
-            -replace github.com/TomoBossi/sensord=$HOME/projects/sensord
-```
-
 ## Python
 
-Installed in Termux's Python (`pip install -e clients/python`), so any
-script can use it. Standard library only.
+Installed in Termux's Python (`pip install -e clients/python`), so any script can use it. Standard library only.
 
 ```python
 import sensord
@@ -107,8 +86,7 @@ Also `c.sensors()`, `c.status()`, and `sub.next(timeout=...)`.
 
 ## Any other language
 
-The protocol is newline-delimited JSON over TCP on `127.0.0.1:47474`, so any
-language with sockets works; even bash does:
+The protocol is newline-delimited JSON over TCP on `127.0.0.1:47474`, so any language with sockets works; even bash does:
 
 ```sh
 exec 3<>/dev/tcp/127.0.0.1/47474
@@ -116,95 +94,51 @@ echo '{"op":"get","id":1,"sensor":"light"}' >&3
 head -1 <&3    # {"op":"value","id":1,"sensor":"ltr569_l","t":7347745050583,"v":[49]}
 ```
 
-Streaming: send `{"op":"sub","id":2,"sensor":"gyroscope","hz":100}`, then
-read lines like `{"id":2,"t":...,"v":[x,y,z]}` until you close the socket.
-All the ops are in [DESIGN.md](DESIGN.md#protocol). Raw clients don't
-auto-start the app; start it with
-`am startservice -n dev.tomo.sensord/.SensorService`.
+Streaming: send `{"op":"sub","id":2,"sensor":"gyroscope","hz":100}`, then read lines like `{"id":2,"t":...,"v":[x,y,z]}` until you close the socket. Raw clients don't auto-start the app, start it with `am startservice -n dev.tomo.sensord/.SensorService`.
 
 ## What the values mean
 
-- **Timestamps** (`t`) are nanoseconds since boot, on the same clock as
-  Android's `elapsedRealtimeNanos` and `CLOCK_BOOTTIME`. They are not wall
-  time.
-- **The magnetometer** adds a 4th value: its calibration status (0
-  unreliable, 1 low, 2 medium, 3 high; wave the phone in a figure 8 to
-  raise it).
-- **Values** (`v`) follow Android's
-  [SensorEvent](https://developer.android.com/reference/android/hardware/SensorEvent#values)
-  layout per type: accelerometer m/s², gyroscope rad/s, magnetometer µT,
-  light lux, and so on.
-- **On-change sensors** (light, step counter) only report changes. A new
-  subscription first receives the last known value, with its original,
-  possibly old, timestamp.
-- **One-shot sensors** (gestures such as `CHOP_CHOP` and `FLIP_TWIST`,
-  significant motion) produce one event per trigger. sensord re-arms them,
-  so a subscription gets every trigger.
-- **`step_detector`** emits `1` per step; count the events. `step_counter`
-  is the total since boot and updates in batches of a few steps.
-- **Step sensors** need the "physical activity" permission, granted once from
-  the app screen.
+- **Timestamps** (`t`) are nanoseconds since boot, on the same clock as Android's `elapsedRealtimeNanos` and `CLOCK_BOOTTIME`. They are not wall time.
+- **The magnetometer** adds a 4th value: its calibration status (0 unreliable, 1 low, 2 medium, 3 high; wave the phone in a figure 8 to raise it).
+- **Values** (`v`) follow Android's [`SensorEvent`](https://developer.android.com/reference/android/hardware/SensorEvent#values) layout per type: accelerometer m/s², gyroscope rad/s, magnetometer µT, light lux, and so on.
+- **On-change sensors** (light, step counter) only report changes. A new subscription first receives the last known value, with its original, possibly old, timestamp.
+- **One-shot sensors** (gestures such as `CHOP_CHOP` and `FLIP_TWIST`, significant motion) produce one event per trigger. `sensord` re-arms them, so a subscription gets every trigger.
+- **`step_detector`** emits `1` per step; count the events. `step_counter` is the total since boot and updates in batches of a few steps.
 
 ## Location
 
-Two virtual sensors, used exactly like the others (`sensord get location`,
-`sensord stream gps 1`, `c.Subscribe("location", 1)`):
+Two virtual sensors, used exactly like the others (`sensord get location`, `sensord stream gps 1`, `c.Subscribe("location", 1)`):
 
 | Sensor | Source | Use it for |
 |---|---|---|
-| `location` | Android's fused provider: satellites, Wi-Fi and cell towers, balanced power | the everyday choice; works indoors |
-| `gps` | raw satellite fixes (GNSS) | best accuracy outdoors; more power, nothing indoors |
+| `location` | Android's fused provider: satellites, Wi-Fi and cell towers, balanced power | decent accuracy, works indoors |
+| `gps` | raw satellite fixes (GNSS) | best accuracy outdoors, more power, nothing indoors |
 
-Values: `[lat, lon, accuracy_m, altitude_m, speed_m/s, bearing_deg,
-declination_deg, field_uT]`, with full float64 precision. The last two come
-from Android's model of Earth's magnetic field at that place: add the
-declination to a magnetic heading to get true north, and compare the
-magnetometer's magnitude with `field_uT` to detect local disturbances. Fields a fix lacks are `null` in streams (and 0 in
-`get`). The rate is capped at 1 Hz. A new subscription gets the last known fix
-at once, with its original timestamp, then live fixes.
+Values: `[lat, lon, accuracy_m, altitude_m, speed_m/s, bearing_deg, declination_deg, field_uT]`, with full `float64` precision. The last two come from Android's model of Earth's magnetic field at that place: add the declination to a magnetic heading to get true north, and compare the magnetometer's magnitude with `field_uT` to detect local disturbances. Fields a fix lacks are `null` in streams (and 0 in `get`). The rate is capped at 1 Hz. A new subscription gets the last known fix at once, with its original timestamp, then live fixes.
 
-Like the sensors, location is only requested from Android while a client is
-subscribed, and released when the last one leaves. Needs the location
-permission from the app screen. "Allow all the time" also lets it work when
-sensord was started without anything in the foreground. Heading (where the
-phone points, as in Google Maps) is not a separate sensor: it comes from
-`rotation_vector`.
+Like the sensors, location is only requested from Android while a client is subscribed, and released when the last one leaves. Needs the location permission from the app screen. "Allow all the time" also lets it work when `sensord` was started without anything in the foreground. Heading (the direction where the phone points in map apps) comes from the `rotation_vector` sensor.
 
 ## Display rotation
 
-`display_rotation` reports how the screen is rotated from the phone's natural
-(portrait) orientation: `0`, `90`, `180` or `270` degrees, whenever it changes
-(Android's `Display.getRotation`). Sensor axes are fixed to the phone's body,
-so an app that rotates, like Termux in landscape, needs this value to know
-which axis is "up" on screen: rotate sensor vectors by it around z. It costs
-nothing while unsubscribed.
+`display_rotation` reports how the screen is rotated from the phone's natural (portrait) orientation: `0`, `90`, `180` or `270` degrees, whenever it changes (Android's `Display.getRotation`). Sensor axes are fixed to the phone's body, so an app that rotates, like Termux in landscape, needs this value to know which axis is "up" on screen: rotate sensor vectors by it around `z`. It costs nothing while unsubscribed.
 
 ## The app
 
-It runs as a foreground service with no visible window. Its launcher icon is
-hidden; open its status screen from Termux:
+It runs as a foreground service with no visible window. Its launcher icon can be hidden from the app drawer through the app itself. Its status screen can be opened from `Termux`:
 
 ```sh
 am start -n dev.tomo.sensord/.MainActivity
 ```
 
-The screen shows powered sensors, rates and readers, and has switches for
-the launcher icon, the battery exemption and the step-sensor permission, plus
-a Stop button.
+The screen shows powered sensors, rates and readers, and has switches for the launcher icon, the battery exemption and the step-sensor permission, plus a Stop button.
 
-- **Power:** each sensor runs at the fastest rate anyone asked for, and only
-  while someone reads it. A client that disconnects or crashes releases its
-  sensors at once. A partial wake lock is held only while a non-wakeup
-  sensor is on.
-- **Boot:** on this phone, MediaTek's DuraSpeed blocks start at boot, so the
-  app starts on first use instead (see above). It restarts itself after
-  updates.
-- **Access:** loopback only, so nothing off the phone can connect. Any local
-  app could, but ordinary sensors need no permission anyway.
+- **Power:** each sensor runs at the fastest rate anyone asked for, and only while someone reads it. A client that disconnects or crashes releases its sensors at once. A partial wake lock is held only while a non-wakeup sensor is on.
+- **Boot:** on the Moto G17 Power, MediaTek's DuraSpeed blocks start at boot, so the app starts on first use instead. It restarts itself after updates.
+- **Access:** loopback only, so nothing off the phone can connect. Any local app could, but ordinary sensors need no permissions anyway.
 
 ## Building
 
-On the phone, no Gradle (setup in DESIGN.md):
+On the phone, no Gradle:
 
 ```sh
 ./build.sh install                                  # Go core + APK, adb install
@@ -212,23 +146,10 @@ go build -o $PREFIX/bin/sensord ./cmd/sensord       # the CLI
 go test ./...                                       # hub and server tests
 ```
 
-The signing key is at `~/.local/share/android-keys/sensord.jks`, outside the
-repo. Back it up: without it, an update means uninstalling first, which
-drops the granted permissions.
-
 ## Troubleshooting
 
-- **`sensord not reachable ... (is the app installed?)`**: auto-start
-  failed. Check `adb shell pidof dev.tomo.sensord`, or open the status
-  screen.
-- **`register STEP_COUNTER: error -22`**: the physical-activity permission
-  isn't granted; grant it on the status screen.
-- **`location permission not granted` / `Android refused location for a
-  background service`**: allow location on the status screen, ideally "all
-  the time".
-- **A rate lower than requested**: check `sensord status` to see what the
-  hardware delivers. Some sensors have a fixed floor or ceiling; the
-  accelerometer never goes below 12.5 Hz, and slower requests are
-  downsampled.
-- **Events dropped**: a client that falls about 1024 lines behind loses
-  events, so read promptly. The count shows in `sensord status`.
+- **`sensord not reachable ... (is the app installed?)`**: auto-start failed. Check `adb shell pidof dev.<user>.sensord`, or open the status screen.
+- **`register STEP_COUNTER: error -22`**: the physical-activity permission isn't granted; grant it on the status screen.
+- **`location permission not granted` / `Android refused location for a background service`**: allow location on the status screen, ideally "all the time".
+- **A rate lower than requested**: check `sensord status` to see what the hardware delivers. Some sensors have a fixed floor or ceiling; the accelerometer never goes below 12.5 Hz, and slower requests are downsampled.
+- **Events dropped**: a client that falls about 1024 lines behind loses events, so read promptly. The count shows in `sensord status`.
