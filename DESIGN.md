@@ -40,7 +40,7 @@ multiplexes to clients. The spike (commit 5d68296) confirmed it: 99 Hz through
 - **BootReceiver**: `BOOT_COMPLETED` → start the service.
 - **MainActivity**: status (clients, active sensors, rates), a "hide launcher
   icon" toggle, and a battery-exemption shortcut. When hidden, it can still be
-  opened with `am start -n dev.tomo.sensord/.MainActivity`.
+  opened with `am start -n io.github.tomobossi.sensord/.MainActivity`.
 - **Launcher entry** is an `activity-alias`, so hiding it means disabling the
   alias via `setComponentEnabledSetting`, the same approach as Termux:API.
 - **Clients**: a Go package plus a `sensord` CLI in Termux, and a Python
@@ -182,7 +182,7 @@ cmd/sensord/             Termux CLI, including record and replay
 client/                  Go client package
 clients/python/          Python client
 app/AndroidManifest.xml
-app/src/dev/tomo/sensord/  Java shell (package dev.tomo.sensord)
+app/src/io/github/tomobossi/sensord/  Java shell
 build.sh
 ```
 
@@ -228,7 +228,7 @@ with background location granted. A refusal becomes the client's error.
   staticReceiver`. Its settings screen is protected by a signature permission
   and has no entry in Settings. **Instead, clients start the app on demand:**
   on a refused connection to the default address, the Go and Python clients
-  run `am startservice -n dev.tomo.sensord/.SensorService` (Termux's `am`
+  run `am startservice -n io.github.tomobossi.sensord/.SensorService` (Termux's `am`
   has no `start-foreground-service`) and retry for 10 s; about 2.5 s from a
   dead app to the first reading. `SENSORD_NO_AUTOSTART=1` disables this.
   SensorService is exported for that reason. A persisted JobScheduler job

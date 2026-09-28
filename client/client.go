@@ -95,7 +95,7 @@ func startApp() error {
 	if err != nil {
 		return err
 	}
-	return exec.Command(am, "startservice", "-n", "dev.tomo.sensord/.SensorService").Run()
+	return exec.Command(am, "startservice", "-n", "io.github.tomobossi.sensord/.SensorService").Run()
 }
 
 // Close ends the connection. The server stops every subscription of this

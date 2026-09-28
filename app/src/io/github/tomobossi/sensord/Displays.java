@@ -1,4 +1,4 @@
-package dev.tomo.sensord;
+package io.github.tomobossi.sensord;
 
 import android.hardware.display.DisplayManager;
 import android.os.Handler;

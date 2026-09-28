@@ -1,4 +1,4 @@
-package dev.tomo.sensord;
+package io.github.tomobossi.sensord;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -40,7 +40,7 @@ final class Locations {
         }
         if (s.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return "location permission not granted: allow it on the sensord screen "
-                    + "(am start -n dev.tomo.sensord/.MainActivity)";
+                    + "(am start -n io.github.tomobossi.sensord/.MainActivity)";
         }
         // A foreground service needs the location type to use location, and
         // Android only allows adding it while the app may use location: when

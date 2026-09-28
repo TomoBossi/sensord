@@ -127,7 +127,7 @@ func fail(format string, args ...any) {
 }
 
 func run() {
-	nb, err := ndk.Open("dev.tomo.sensord")
+	nb, err := ndk.Open("io.github.tomobossi.sensord")
 	if err != nil {
 		fail("sensors: %v", err)
 		return
@@ -239,8 +239,8 @@ func (b *backend) Disable(h int32) error {
 	return nil
 }
 
-//export Java_dev_tomo_sensord_Core_onVirtual
-func Java_dev_tomo_sensord_Core_onVirtual(env *C.JNIEnv, cls C.jclass, id C.jint, t C.jlong, values C.jdoubleArray) {
+//export Java_io_github_tomobossi_sensord_Core_onVirtual
+func Java_io_github_tomobossi_sensord_Core_onVirtual(env *C.JNIEnv, cls C.jclass, id C.jint, t C.jlong, values C.jdoubleArray) {
 	mu.Lock()
 	h := theHub
 	mu.Unlock()
@@ -279,8 +279,8 @@ func statusJSON() []byte {
 	return b
 }
 
-//export Java_dev_tomo_sensord_Core_status
-func Java_dev_tomo_sensord_Core_status(env *C.JNIEnv, cls C.jclass) C.jstring {
+//export Java_io_github_tomobossi_sensord_Core_status
+func Java_io_github_tomobossi_sensord_Core_status(env *C.JNIEnv, cls C.jclass) C.jstring {
 	cs := C.CString(string(statusJSON()))
 	defer C.free(unsafe.Pointer(cs))
 	return C.new_string(env, cs)
@@ -288,8 +288,8 @@ func Java_dev_tomo_sensord_Core_status(env *C.JNIEnv, cls C.jclass) C.jstring {
 
 var startOnce sync.Once
 
-//export Java_dev_tomo_sensord_Core_start
-func Java_dev_tomo_sensord_Core_start(env *C.JNIEnv, cls C.jclass) {
+//export Java_io_github_tomobossi_sensord_Core_start
+func Java_io_github_tomobossi_sensord_Core_start(env *C.JNIEnv, cls C.jclass) {
 	startOnce.Do(func() {
 		C.jni_init(env, cls)
 		go run()

@@ -1,4 +1,4 @@
-package dev.tomo.sensord;
+package io.github.tomobossi.sensord;
 
 import android.Manifest;
 import android.app.Activity;
@@ -105,7 +105,7 @@ public class MainActivity extends Activity {
         hint.setTextSize(12);
         hint.setPadding(0, dp(20), 0, 0);
         hint.setText("With the icon hidden, open this screen from Termux:\n"
-                + "am start -n dev.tomo.sensord/.MainActivity\n\n"
+                + "am start -n io.github.tomobossi.sensord/.MainActivity\n\n"
                 + "Starts automatically at boot and after updates.");
         root.addView(hint);
 

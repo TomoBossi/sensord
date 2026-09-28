@@ -68,7 +68,7 @@ def _start_app():
     am = shutil.which("am")
     if not am:
         return False
-    cmd = [am, "startservice", "-n", "dev.tomo.sensord/.SensorService"]
+    cmd = [am, "startservice", "-n", "io.github.tomobossi.sensord/.SensorService"]
     return subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 

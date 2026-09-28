@@ -94,7 +94,7 @@ echo '{"op":"get","id":1,"sensor":"light"}' >&3
 head -1 <&3    # {"op":"value","id":1,"sensor":"ltr569_l","t":7347745050583,"v":[49]}
 ```
 
-Streaming: send `{"op":"sub","id":2,"sensor":"gyroscope","hz":100}`, then read lines like `{"id":2,"t":...,"v":[x,y,z]}` until you close the socket. Raw clients don't auto-start the app, start it with `am startservice -n dev.tomo.sensord/.SensorService`.
+Streaming: send `{"op":"sub","id":2,"sensor":"gyroscope","hz":100}`, then read lines like `{"id":2,"t":...,"v":[x,y,z]}` until you close the socket. Raw clients don't auto-start the app, start it with `am startservice -n io.github.tomobossi.sensord/.SensorService`.
 
 ## What the values mean
 
@@ -127,7 +127,7 @@ Like the sensors, location is only requested from Android while a client is subs
 It runs as a foreground service with no visible window. Its launcher icon can be hidden from the app drawer through the app itself. Its status screen can be opened from `Termux`:
 
 ```sh
-am start -n dev.tomo.sensord/.MainActivity
+am start -n io.github.tomobossi.sensord/.MainActivity
 ```
 
 The screen shows powered sensors, rates and readers, and has switches for the launcher icon, the battery exemption and the step-sensor permission, plus a Stop button.
@@ -178,7 +178,7 @@ the app before installing a new build.
 
 ## Troubleshooting
 
-- **`sensord not reachable ... (is the app installed?)`**: auto-start failed. Check `adb shell pidof dev.tomo.sensord`, or open the status screen.
+- **`sensord not reachable ... (is the app installed?)`**: auto-start failed. Check `adb shell pidof io.github.tomobossi.sensord`, or open the status screen.
 - **`register STEP_COUNTER: error -22`**: the physical-activity permission isn't granted; grant it on the status screen.
 - **`location permission not granted` / `Android refused location for a background service`**: allow location on the status screen, ideally "all the time".
 - **A rate lower than requested**: check `sensord status` to see what the hardware delivers. Some sensors have a fixed floor or ceiling; the accelerometer never goes below 12.5 Hz, and slower requests are downsampled.

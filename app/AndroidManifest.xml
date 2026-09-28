@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.tomo.sensord">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.tomobossi.sensord">
   <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="35"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
