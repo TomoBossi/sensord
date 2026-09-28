@@ -70,7 +70,7 @@ Also `c.Get(sensor, 0)`, `c.Sensors()`, `c.Status()`, and `sub.Close()`.
 
 ## Python
 
-Installed in Termux's Python (`pip install -e clients/python`), so any script can use it. Standard library only.
+Installed in `Termux`'s Python (`pip install -e clients/python`), so any script can use it. Standard library only.
 
 ```python
 import sensord
@@ -120,7 +120,7 @@ Like the sensors, location is only requested from Android while a client is subs
 
 ## Display rotation
 
-`display_rotation` reports how the screen is rotated from the phone's natural (portrait) orientation: `0`, `90`, `180` or `270` degrees, whenever it changes (Android's `Display.getRotation`). Sensor axes are fixed to the phone's body, so an app that rotates, like Termux in landscape, needs this value to know which axis is "up" on screen: rotate sensor vectors by it around `z`. It costs nothing while unsubscribed.
+`display_rotation` reports how the screen is rotated from the phone's natural (portrait) orientation: `0`, `90`, `180` or `270` degrees, whenever it changes (Android's `Display.getRotation`). Sensor axes are fixed to the phone's body, so an app that rotates, like `Termux` in landscape, needs this value to know which axis is "up" on screen: rotate sensor vectors by it around `z`. It costs nothing while unsubscribed.
 
 ## The app
 
@@ -154,7 +154,7 @@ On the phone, in `Termux`, with no Gradle. Build dependencies:
 pkg install golang clang ndk-sysroot openjdk-21 aapt2 d8 apksigner zip
 ```
 
-`android.jar` from Android's SDK platform 35 is also needed (no Termux package ships it). `build.sh` looks for it at
+`android.jar` from Android's SDK platform 35 is also needed (no `Termux` package ships it). `build.sh` looks for it at
 `~/.local/share/android-sdk/platforms/android-35/android.jar`; set `ANDROID_JAR` to use another path.
 
 ```sh
