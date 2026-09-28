@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 
 JAR=${ANDROID_JAR:-$HOME/.local/share/android-sdk/platforms/android-35/android.jar}
 KS=${SENSORD_KEYSTORE:-$HOME/.local/share/android-keys/sensord.jks}
+PASS=${SENSORD_KEYSTORE_PASS:-sensord}
 B=build
 
 rm -rf $B && mkdir -p $B/lib/arm64-v8a $B/classes
@@ -24,10 +25,10 @@ cp $B/base.apk $B/unsigned.apk
 
 if [ ! -f "$KS" ]; then
     mkdir -p "$(dirname "$KS")"
-    keytool -genkeypair -keystore "$KS" -storepass sensord -keypass sensord -alias sensord \
+    keytool -genkeypair -keystore "$KS" -storepass "$PASS" -keypass "$PASS" -alias sensord \
         -keyalg RSA -keysize 2048 -validity 36500 -dname CN=sensord >/dev/null 2>&1
 fi
-apksigner sign --ks "$KS" --ks-pass pass:sensord --out $B/sensord.apk $B/unsigned.apk
+apksigner sign --ks "$KS" --ks-pass "pass:$PASS" --out $B/sensord.apk $B/unsigned.apk
 echo "built $B/sensord.apk"
 
 if [ "${1:-}" = install ]; then

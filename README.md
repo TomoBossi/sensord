@@ -136,19 +136,49 @@ The screen shows powered sensors, rates and readers, and has switches for the la
 - **Boot:** on the Moto G17 Power, MediaTek's DuraSpeed blocks start at boot, so the app starts on first use instead. It restarts itself after updates.
 - **Access:** loopback only, so nothing off the phone can connect. Any local app could, but ordinary sensors need no permissions anyway.
 
-## Building
+## Install
 
-On the phone, no Gradle:
+Build the app on the phone (see [Building](#building)), then install the CLI and whichever clients you need:
 
 ```sh
-./build.sh install                                  # Go core + APK, adb install
-go build -o $PREFIX/bin/sensord ./cmd/sensord       # the CLI
+go install github.com/TomoBossi/sensord/cmd/sensord@latest     # the CLI
+go get github.com/TomoBossi/sensord@latest                     # the Go package, in your module
+pip install "git+https://github.com/TomoBossi/sensord#subdirectory=clients/python"
+```
+
+## Building
+
+On the phone, in `Termux`, with no Gradle. Build dependencies:
+
+```sh
+pkg install golang clang ndk-sysroot openjdk-21 aapt2 d8 apksigner zip
+```
+
+`android.jar` from Android's SDK platform 35 is also needed (no Termux package ships it). `build.sh` looks for it at
+`~/.local/share/android-sdk/platforms/android-35/android.jar`; set `ANDROID_JAR` to use another path.
+
+```sh
+./build.sh                                          # Go core + APK, in build/sensord.apk
+./build.sh install                                  # the same, then adb install
 go test ./...                                       # hub and server tests
 ```
 
+### Signing key
+
+The APK must be signed, and the key is never in this repo. `build.sh` uses `~/.local/share/android-keys/sensord.jks` (override with
+`SENSORD_KEYSTORE`, and its password with `SENSORD_KEYSTORE_PASS`, default `sensord`). If none exists, it creates one there. To make
+your own instead:
+
+```sh
+keytool -genkeypair -keystore sensord.jks -alias sensord -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Android only accepts an update signed with the same key as the installed app, so **back the keystore up**. Losing it means uninstalling
+the app before installing a new build.
+
 ## Troubleshooting
 
-- **`sensord not reachable ... (is the app installed?)`**: auto-start failed. Check `adb shell pidof dev.<user>.sensord`, or open the status screen.
+- **`sensord not reachable ... (is the app installed?)`**: auto-start failed. Check `adb shell pidof dev.tomo.sensord`, or open the status screen.
 - **`register STEP_COUNTER: error -22`**: the physical-activity permission isn't granted; grant it on the status screen.
 - **`location permission not granted` / `Android refused location for a background service`**: allow location on the status screen, ideally "all the time".
 - **A rate lower than requested**: check `sensord status` to see what the hardware delivers. Some sensors have a fixed floor or ceiling; the accelerometer never goes below 12.5 Hz, and slower requests are downsampled.

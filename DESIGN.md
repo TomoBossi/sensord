@@ -35,8 +35,8 @@ multiplexes to clients. The spike (commit 5d68296) confirmed it: 99 Hz through
   the socket server, protocol, hub, downsampling and the sensor reading itself,
   via the NDK sensor API. Java calls into it through a single JNI entry point.
 - **SensorService** (Java, foreground service, type `specialUse`): keeps the
-  process in the foreground state and loads the Go core. Started at boot and by
-  opening the app.
+  process in the foreground state and loads the Go core. Started by the first
+  client, by opening the app, or at boot where the device allows it.
 - **BootReceiver**: `BOOT_COMPLETED` → start the service.
 - **MainActivity**: status (clients, active sensors, rates), a "hide launcher
   icon" toggle, and a battery-exemption shortcut. When hidden, it can still be
@@ -162,9 +162,10 @@ No Gradle and no AndroidX. `build.sh` runs go (c-shared) → aapt2 → javac →
 d8 → zip → apksigner against `~/.local/share/android-sdk/platforms/android-35/android.jar`.
 `./build.sh install` also runs `adb install -r`.
 
-The signing keystore lives outside the repo, at
-`~/.local/share/android-keys/sensord.jks`. **If it is lost, updates require an
-uninstall.** It needs a backup somewhere once remotes exist.
+The signing keystore never enters the repo. `build.sh` reads it from
+`$SENSORD_KEYSTORE` (default `~/.local/share/android-keys/sensord.jks`) and
+creates one there if missing. **If it is lost, updates require an
+uninstall**, so it must be backed up off the phone.
 
 The hub and downsampler are pure Go with no cgo, so they are tested with
 plain `go test` in Termux.
@@ -172,13 +173,16 @@ plain `go test` in Termux.
 ## Layout
 
 ```
-cmd/libsensord/          Go core entry point (c-shared, JNI export, NDK glue)
+cmd/libsensord/          Go core entry point (c-shared, JNI export)
+internal/ndk/            NDK sensor backend (cgo)
 internal/hub/            subscriptions, rates, downsampling (pure Go)
-cmd/sensord/             Termux CLI
+internal/server/         socket server and protocol handling
+proto/                   protocol types
+cmd/sensord/             Termux CLI, including record and replay
 client/                  Go client package
 clients/python/          Python client
 app/AndroidManifest.xml
-app/src/dev/tomo/sensord/  Java shell
+app/src/dev/tomo/sensord/  Java shell (package dev.tomo.sensord)
 build.sh
 ```
 
@@ -189,11 +193,15 @@ build.sh
 2. ~~Hub: `list`/`sub`/`unsub`, per-client downsampling, Go client + CLI.~~
    Done.
 3. ~~`get`, wake lock (test with Termux's own wake lock released).~~ Done.
-4. ~~Boot start, hidden icon toggle, status screen.~~ Done; boot start and
-   the icon toggle verified (hidden with no placeholder). Boot start is
-   blocked by DuraSpeed; replaced by client auto-start (see Device notes).
-5. ~~Polish: Python client, one-shot sensors, get, app icon.~~ Done; the
-   gesture sensors still need a physical test.
+4. ~~Boot start, hidden icon toggle, status screen.~~ Done; the icon toggle
+   is verified (hidden with no placeholder). Boot start is blocked by
+   DuraSpeed on the test phone, so clients auto-start the app instead (see
+   Device notes).
+5. ~~Polish: Python client, one-shot sensors, get, app icon.~~ Done; every
+   gesture sensor (CHOP_CHOP, FLIP_TWIST, FLIP, WAKE_GESTURE, TILT_DETECTOR,
+   SIGNIFICANT_MOTION) fires repeatedly through re-arm on the device.
+6. ~~Location, display rotation, magnetometer calibration, record/replay.~~
+   Done.
 
 ## Location
 
