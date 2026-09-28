@@ -14,6 +14,8 @@ import android.os.PowerManager;
 import android.os.Process;
 import android.provider.Settings;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -45,6 +47,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        requestWindowFeature(Window.FEATURE_NO_TITLE); // the screen has its own title
         startForegroundService(new Intent(this, SensorService.class));
 
         LinearLayout root = new LinearLayout(this);
@@ -106,11 +109,17 @@ public class MainActivity extends Activity {
         hint.setPadding(0, dp(20), 0, 0);
         hint.setText("With the icon hidden, open this screen from Termux:\n"
                 + "am start -n io.github.tomobossi.sensord/.MainActivity\n\n"
-                + "Starts automatically at boot and after updates.");
+                + "Starts when a program first connects, and after updates.");
         root.addView(hint);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(root);
+        // Targeting Android 15 draws edge to edge: keep clear of the system bars.
+        scroll.setOnApplyWindowInsetsListener((v, in) -> {
+            android.graphics.Insets i = in.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            v.setPadding(i.left, i.top, i.right, i.bottom);
+            return WindowInsets.CONSUMED;
+        });
         setContentView(scroll);
     }
 
