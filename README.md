@@ -146,6 +146,8 @@ go get github.com/TomoBossi/sensord@latest                     # the Go package,
 pip install "git+https://github.com/TomoBossi/sensord#subdirectory=clients/python"
 ```
 
+Open the app once after installing it (it shows its status screen). Android keeps a newly installed app stopped until it is first opened, and until then clients can't start it.
+
 ## Building
 
 On the phone, in `Termux`, with no Gradle. Build dependencies:
