@@ -15,15 +15,35 @@ final class Core {
     static native String status();
 
     /**
-     * A reading of virtual sensor id (1 location, 2 gps, 3 display rotation),
-     * on the elapsedRealtimeNanos clock; missing values are NaN.
+     * A reading of virtual sensor id (1 location, 2 gps, 3 display rotation,
+     * then the Virtual sources below), on the elapsedRealtimeNanos clock;
+     * missing values are NaN.
      */
     static native void onVirtual(int id, long elapsedNanos, double[] values);
+
+    /** Virtual sensors by id, from 4 on. */
+    private static final Virtual[] sources = {
+            new Battery(), new Thermal(), new Torch(), new Screen(), new Wifi(), new Cell(),
+    };
+
+    private static Virtual source(int id) {
+        for (Virtual v : sources) {
+            if (v.id == id) {
+                return v;
+            }
+        }
+        return null;
+    }
 
     /** Called by the Go core to start a virtual sensor; returns an error or null. */
     static String virtualStart(int id, long intervalMs) {
         if (id == Displays.ID) {
             return Displays.start();
+        }
+        Virtual v = source(id);
+        if (v != null) {
+            SensorService s = SensorService.instance;
+            return s == null ? "service not running" : v.start(s, intervalMs);
         }
         return Locations.start(id, intervalMs);
     }
@@ -32,6 +52,14 @@ final class Core {
     static void virtualStop(int id) {
         if (id == Displays.ID) {
             Displays.stop();
+            return;
+        }
+        Virtual v = source(id);
+        if (v != null) {
+            SensorService s = SensorService.instance;
+            if (s != null) {
+                v.stop(s);
+            }
         } else {
             Locations.stop(id);
         }

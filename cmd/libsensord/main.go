@@ -179,36 +179,56 @@ const (
 	virtualBase    = 0x40000000
 )
 
-var locationSensors = []hub.Info{
+// virtual is one more Java source (a Virtual): id, name, and the fastest
+// poll (0 for callback sources, which report on change). Polled ones are not
+// wakeup, so the wake lock keeps them ticking with the screen off.
+func virtual(id int32, name, vendor string, minDelayUs int32) hub.Info {
+	i := hub.Info{Handle: virtualBase + id, Name: name, Vendor: vendor, Type: name, TypeID: -id,
+		MinDelayUs: minDelayUs, Mode: hub.Continuous, Default: true}
+	if minDelayUs == 0 {
+		i.Mode, i.Wakeup = hub.OnChange, true
+	}
+	return i
+}
+
+var virtualSensors = []hub.Info{
 	{Handle: locationHandle, Name: "location", Vendor: "android fused", Type: "location", TypeID: -1,
 		MinDelayUs: 1000000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
 	{Handle: gpsHandle, Name: "gps", Vendor: "android gnss", Type: "gps", TypeID: -2,
 		MinDelayUs: 1000000, Mode: hub.Continuous, Wakeup: true, Default: true, Precise: true},
 	{Handle: displayHandle, Name: "display_rotation", Vendor: "android display", Type: "display_rotation", TypeID: -3,
 		Mode: hub.OnChange, Wakeup: true, Default: true},
+	virtual(4, "battery", "android battery", 250000),
+	virtual(5, "thermal", "android power", 1000000),
+	virtual(6, "flashlight", "android camera", 0),
+	virtual(7, "screen", "android display", 0),
+	virtual(8, "wifi", "android wifi", 1000000),
+	virtual(9, "cell", "android telephony", 0),
 }
 
-// backend is the NDK sensors plus the location virtual sensors, which are
-// served by Java's LocationManager. Location is marked wakeup: fixes arrive
-// by callback, so it needs no wake lock.
+// backend is the NDK sensors plus the virtual sensors served by Java.
+// Location is marked wakeup: fixes arrive by callback, so it needs no wake
+// lock.
 type backend struct {
 	*ndk.Backend
 }
 
 func (b *backend) Sensors() []hub.Info {
-	return append(b.Backend.Sensors(), locationSensors...)
+	return append(b.Backend.Sensors(), virtualSensors...)
 }
 
-func locationID(h int32) (int, bool) {
-	switch h {
-	case locationHandle, gpsHandle, displayHandle:
-		return int(h - virtualBase), true
+// virtualID is the Java-side id of a virtual sensor's handle.
+func virtualID(h int32) (int, bool) {
+	for _, i := range virtualSensors {
+		if i.Handle == h {
+			return int(h - virtualBase), true
+		}
 	}
 	return 0, false
 }
 
 func (b *backend) Enable(h int32, periodUs int32) error {
-	id, ok := locationID(h)
+	id, ok := virtualID(h)
 	if !ok {
 		return b.Backend.Enable(h, periodUs)
 	}
@@ -222,14 +242,14 @@ func (b *backend) Enable(h int32, periodUs int32) error {
 }
 
 func (b *backend) SetPeriod(h int32, periodUs int32) error {
-	if _, ok := locationID(h); !ok {
+	if _, ok := virtualID(h); !ok {
 		return b.Backend.SetPeriod(h, periodUs)
 	}
 	return b.Enable(h, periodUs) // Java restarts updates at the new interval
 }
 
 func (b *backend) Disable(h int32) error {
-	id, ok := locationID(h)
+	id, ok := virtualID(h)
 	if !ok {
 		return b.Backend.Disable(h)
 	}

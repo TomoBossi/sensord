@@ -158,11 +158,7 @@ func (s *Server) do(c *conn, req proto.Request) proto.Message {
 		// Readings are float32 at the source; print them as such, like the
 		// event stream does, instead of their float64 expansion.
 		for i, x := range v {
-			if math.IsNaN(x) || math.IsInf(x, 0) {
-				v[i] = 0 // JSON has no NaN; event lines use null instead
-				continue
-			}
-			if !info.Precise {
+			if !info.Precise && !math.IsNaN(x) && !math.IsInf(x, 0) { // missing values go out as null
 				v[i], _ = strconv.ParseFloat(strconv.FormatFloat(x, 'g', -1, 32), 64)
 			}
 		}

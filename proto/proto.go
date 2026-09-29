@@ -6,6 +6,12 @@
 // event line of that stream. Event lines are the only messages without "op".
 package proto
 
+import (
+	"encoding/json"
+	"math"
+	"strconv"
+)
+
 // DefaultAddr is where the sensord app listens. Loopback only.
 const DefaultAddr = "127.0.0.1:47474"
 
@@ -47,8 +53,47 @@ type Message struct {
 	Status  *Status  `json:"status,omitempty"`
 
 	// Event fields.
-	T int64     `json:"t,omitempty"` // event time, ns, CLOCK_BOOTTIME (elapsedRealtimeNanos)
-	V []float64 `json:"v,omitempty"`
+	T int64  `json:"t,omitempty"` // event time, ns, CLOCK_BOOTTIME (elapsedRealtimeNanos)
+	V Values `json:"v,omitempty"`
+}
+
+// Values are an event's values. A value the source lacks (a fix without
+// altitude, Wi-Fi while disconnected) is NaN here and null on the wire.
+type Values []float64
+
+func (v Values) MarshalJSON() ([]byte, error) {
+	b := []byte{'['}
+	for i, x := range v {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			b = append(b, "null"...)
+		} else {
+			b = strconv.AppendFloat(b, x, 'g', -1, 64)
+		}
+	}
+	return append(b, ']'), nil
+}
+
+func (v *Values) UnmarshalJSON(b []byte) error {
+	var raw []*float64
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		*v = nil
+		return nil
+	}
+	out := make(Values, len(raw))
+	for i, p := range raw {
+		out[i] = math.NaN()
+		if p != nil {
+			out[i] = *p
+		}
+	}
+	*v = out
+	return nil
 }
 
 // Status is a snapshot of the server's state.

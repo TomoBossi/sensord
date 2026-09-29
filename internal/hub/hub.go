@@ -159,6 +159,14 @@ func New(be Backend) *Hub {
 			h.byType[strings.ToLower(info.Type)] = s
 		}
 	}
+	// A type with no default sensor (a vendor's second light sensor, say)
+	// still resolves, to its first sensor.
+	for _, s := range h.sensors {
+		k := strings.ToLower(s.info.Type)
+		if _, ok := h.byType[k]; !ok {
+			h.byType[k] = s
+		}
+	}
 	return h
 }
 

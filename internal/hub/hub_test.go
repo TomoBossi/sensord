@@ -20,6 +20,7 @@ func (f *fakeBackend) Sensors() []Info {
 		{Handle: 2, Name: "ltr569_l", Type: "light", TypeID: 5, Mode: OnChange, Default: true},
 		{Handle: 3, Name: "SIGNIFICANT_MOTION", Type: "significant_motion", TypeID: 17, Mode: OneShot, Default: true},
 		{Handle: 4, Name: "ACC_WAKEUP", Type: "accelerometer", TypeID: 1, MinDelayUs: 5000, Wakeup: true},
+		{Handle: 5, Name: "REAR_FLK", Type: "rearflk", TypeID: 65700, Mode: OnChange}, // no default of its type
 	}
 }
 
@@ -73,6 +74,7 @@ func TestResolve(t *testing.T) {
 		"ACCELEROMETER": "bmi3xy_acc",
 		"acc_wakeup":    "ACC_WAKEUP",
 		"bmi3xy_acc":    "bmi3xy_acc",
+		"rearflk":       "REAR_FLK",
 	} {
 		info, _, err := h.Subscribe(&fakeClient{}, 1, spec, 10)
 		if err != nil || info.Name != want {

@@ -103,6 +103,7 @@ Streaming: send `{"op":"sub","id":2,"sensor":"gyroscope","hz":100}`, then read l
 - **Values** (`v`) follow Android's [`SensorEvent`](https://developer.android.com/reference/android/hardware/SensorEvent#values) layout per type: accelerometer m/s², gyroscope rad/s, magnetometer µT, light lux, and so on.
 - **On-change sensors** (light, step counter) only report changes. A new subscription first receives the last known value, with its original, possibly old, timestamp.
 - **One-shot sensors** (gestures such as `CHOP_CHOP` and `FLIP_TWIST`, significant motion) produce one event per trigger. `sensord` re-arms them, so a subscription gets every trigger.
+- **Missing values** are `null` on the wire, NaN in the Go client and `None` in Python: a fix without altitude, Wi-Fi while disconnected, a battery figure the phone doesn't report.
 - **`step_detector`** emits `1` per step; count the events. `step_counter` is the total since boot and updates in batches of a few steps.
 
 ## Location
@@ -114,13 +115,31 @@ Two virtual sensors, used exactly like the others (`sensord get location`, `sens
 | `location` | Android's fused provider: satellites, Wi-Fi and cell towers, balanced power | decent accuracy, works indoors |
 | `gps` | raw satellite fixes (GNSS) | best accuracy outdoors, more power, nothing indoors |
 
-Values: `[lat, lon, accuracy_m, altitude_m, speed_m/s, bearing_deg, declination_deg, field_uT]`, with full `float64` precision. The last two come from Android's model of Earth's magnetic field at that place: add the declination to a magnetic heading to get true north, and compare the magnetometer's magnitude with `field_uT` to detect local disturbances. Fields a fix lacks are `null` in streams (and 0 in `get`). The rate is capped at 1 Hz. A new subscription gets the last known fix at once, with its original timestamp, then live fixes.
+Values: `[lat, lon, accuracy_m, altitude_m, speed_m/s, bearing_deg, declination_deg, field_uT]`, with full `float64` precision. The last two come from Android's model of Earth's magnetic field at that place: add the declination to a magnetic heading to get true north, and compare the magnetometer's magnitude with `field_uT` to detect local disturbances. Fields a fix lacks are `null` (NaN in the Go client, `None` in Python). The rate is capped at 1 Hz. A new subscription gets the last known fix at once, with its original timestamp, then live fixes.
 
 Like the sensors, location is only requested from Android while a client is subscribed, and released when the last one leaves. Needs the location permission from the app screen. "Allow all the time" also lets it work when `sensord` was started without anything in the foreground. Heading (the direction where the phone points in map apps) comes from the `rotation_vector` sensor.
 
 ## Display rotation
 
 `display_rotation` reports how the screen is rotated from the phone's natural (portrait) orientation: `0`, `90`, `180` or `270` degrees, whenever it changes (Android's `Display.getRotation`). Sensor axes are fixed to the phone's body, so an app that rotates, like `Termux` in landscape, needs this value to know which axis is "up" on screen: rotate sensor vectors by it around `z`. It costs nothing while unsubscribed.
+
+## Phone state
+
+More virtual sensors, for what the phone knows about itself. Like the others, each is only read while someone is subscribed. The polled ones (a max rate in `sensord list`) keep the wake lock while subscribed, so they keep ticking with the screen off; ask for a low rate, such as 1 Hz, for long logs.
+
+| Sensor | Values | Updates |
+|---|---|---|
+| `battery` | `[level_%, status, plugged, health, temp_C, voltage_V, current_mA, avg_current_mA, charge_mAh, cycles, to_full_s, saver]` | polled, up to 4 Hz |
+| `thermal` | `[status, headroom]` | polled, up to 1 Hz |
+| `flashlight` | `[on]`: 1 while any flashlight is on | on change |
+| `screen` | `[state, brightness, auto]` | on change |
+| `wifi` | `[rssi_dBm, level, link_Mbps, freq_MHz]` for the connected network | polled, up to 1 Hz |
+| `cell` | `[level, dBm]` of the mobile signal | on change |
+
+- **`battery`**: `status` is 2 charging, 3 discharging, 4 not charging, 5 full. `plugged` is 0 unplugged, 1 AC, 2 USB, 4 wireless (a bitmask). `health` is 2 good, 3 overheat, 4 dead, 5 over voltage, 7 cold. Currents are positive while charging. `charge_mAh` is what's left, so `charge_mAh / level_% * 100` estimates the full capacity. `to_full_s` is Android's estimate while charging. `saver` is 1 with battery saver on.
+- **`thermal`**: `status` is Android's thermal status, 0 none to 6 shutdown; the phone throttles from 3 (severe). `headroom` forecasts 10 s ahead how close it is to severe throttling, where 1.0 means there.
+- **`screen`**: `state` is 1 off, 2 on, 3 doze (always-on display), 4 doze suspended. `brightness` is the brightness setting from 0 to 1, and `auto` is 1 with automatic brightness.
+- **`wifi`** and **`cell`**: `level` is the 0 to 4 bars of the status bar. Wi-Fi values are `null`, and its level 0, while not connected.
 
 ## The app
 

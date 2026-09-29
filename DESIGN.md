@@ -220,6 +220,19 @@ On first use the service re-declares its foreground types as
 location: started from the foreground (auto-start from Termux qualifies) or
 with background location granted. A refusal becomes the client's error.
 
+## Phone state
+
+`battery`, `thermal`, `flashlight`, `screen`, `wifi` and `cell` are more
+virtual sensors (ids 4 to 9), each a `Virtual` on the Java side. Sources
+Android pushes (torch callback, display listener, telephony callback) are
+on-change and wakeup. Sources that have to be polled (battery current,
+thermal headroom, Wi-Fi RSSI) are continuous with a minimum period, and not
+wakeup, so the hub holds the wake lock while they are subscribed and a
+Handler loop polls them at the registered period.
+
+Missing values are NaN end to end: Java sends NaN, the wire carries `null`,
+and `proto.Values` decodes `null` back to NaN.
+
 ## Device notes (moto g17 power)
 
 - **Boot start does not work here.** MediaTek's DuraSpeed (a preinstalled,
