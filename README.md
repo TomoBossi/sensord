@@ -157,7 +157,7 @@ The screen shows powered sensors, rates and readers, and has switches for the la
 
 ## Install
 
-Build the app on the phone (see [Building](#building)), then install the CLI and whichever clients you need:
+Install the app from the APK on the [Releases](https://github.com/TomoBossi/sensord/releases) page (or build it, see [Building](#building)), then the CLI and whichever clients you need:
 
 ```sh
 go install github.com/TomoBossi/sensord/cmd/sensord@latest     # the CLI

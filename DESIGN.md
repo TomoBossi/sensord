@@ -167,6 +167,11 @@ The signing keystore never enters the repo. `build.sh` reads it from
 creates one there if missing. **If it is lost, updates require an
 uninstall**, so it must be backed up off the phone.
 
+Releases: bump `versionCode` (by one) and `versionName` (the tag, without
+its `v`) in the manifest, tag, build the APK from the tag and attach it to
+the GitHub release. Android installs an update only over a lower or equal
+`versionCode`, signed with the same key.
+
 The hub and downsampler are pure Go with no cgo, so they are tested with
 plain `go test` in Termux.
 
